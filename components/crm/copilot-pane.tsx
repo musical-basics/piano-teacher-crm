@@ -7,9 +7,10 @@ import type { Student } from "@/lib/types"
 interface CopilotPaneProps {
   student: Student
   onUpdateNotes?: (notes: string) => void
+  onEditStudent?: () => void
 }
 
-export function CopilotPane({ student, onUpdateNotes }: CopilotPaneProps) {
+export function CopilotPane({ student, onUpdateNotes, onEditStudent }: CopilotPaneProps) {
   const [copilotMessage, setCopilotMessage] = useState("")
   const [notes, setNotes] = useState(student.instructorNotes || "")
 
@@ -56,7 +57,16 @@ export function CopilotPane({ student, onUpdateNotes }: CopilotPaneProps) {
       <div className="p-4 border-b border-slate-100">
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <h2 className="text-xl font-serif text-slate-800">{student.name}</h2>
-          <div className="flex items-center gap-1">
+          {onEditStudent && (
+            <button
+              onClick={onEditStudent}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="Edit student details"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex items-center gap-1 ml-auto">
             {student.tags.map((tag) => (
               <span key={tag} className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-slate-100 text-slate-500">
                 {tag}

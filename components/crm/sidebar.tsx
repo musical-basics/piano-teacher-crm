@@ -1,16 +1,17 @@
 "use client"
 
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, FlaskConical } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { formatRelativeTime } from "@/lib/date-utils"
 
 interface SidebarProps {
   students: Student[]
-  selectedStudent: Student
+  selectedStudent: Student | null
   onSelectStudent: (student: Student) => void
   onAddStudent: () => void
   searchQuery: string
   onSearchChange: (query: string) => void
+  onOpenDebug?: () => void
 }
 
 export function Sidebar({
@@ -20,6 +21,7 @@ export function Sidebar({
   onAddStudent,
   searchQuery,
   onSearchChange,
+  onOpenDebug,
 }: SidebarProps) {
   return (
     <div className="h-full border-r border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -51,16 +53,15 @@ export function Sidebar({
       {/* Student List */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
         {students.map((student) => {
-          const isSelected = selectedStudent.id === student.id
+          const isSelected = selectedStudent?.id === student.id
           const lastMessage = student.messages[student.messages.length - 1]
 
           return (
             <button
               key={student.id}
               onClick={() => onSelectStudent(student)}
-              className={`w-full p-4 rounded-2xl text-left transition-all ${
-                isSelected ? "bg-white shadow-sm ring-1 ring-slate-200" : "hover:bg-slate-50"
-              }`}
+              className={`w-full p-4 rounded-2xl text-left transition-all ${isSelected ? "bg-white shadow-sm ring-1 ring-slate-200" : "hover:bg-slate-50"
+                }`}
             >
               <div className="flex items-start gap-3">
                 {/* Unread indicator */}
@@ -86,6 +87,19 @@ export function Sidebar({
           )
         })}
       </div>
+
+      {/* Footer - Debug Button */}
+      {onOpenDebug && (
+        <div className="px-4 py-3 border-t border-slate-100">
+          <button
+            onClick={onOpenDebug}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            Test DB Connection
+          </button>
+        </div>
+      )}
     </div>
   )
 }
