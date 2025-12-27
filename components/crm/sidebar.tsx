@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Plus, FlaskConical } from "lucide-react"
+import { Search, Plus, FlaskConical, Settings } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { formatRelativeTime } from "@/lib/date-utils"
 
@@ -12,6 +12,7 @@ interface SidebarProps {
   searchQuery: string
   onSearchChange: (query: string) => void
   onOpenDebug?: () => void
+  onOpenSettings?: () => void
 }
 
 export function Sidebar({
@@ -22,6 +23,7 @@ export function Sidebar({
   searchQuery,
   onSearchChange,
   onOpenDebug,
+  onOpenSettings,
 }: SidebarProps) {
   return (
     <div className="h-full border-r border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -88,18 +90,27 @@ export function Sidebar({
         })}
       </div>
 
-      {/* Footer - Debug Button */}
-      {onOpenDebug && (
-        <div className="px-4 py-3 border-t border-slate-100">
+      {/* Footer - Settings & Debug */}
+      <div className="px-4 py-3 border-t border-slate-100 space-y-1">
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-xl transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+            Your Persona
+          </button>
+        )}
+        {onOpenDebug && (
           <button
             onClick={onOpenDebug}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
             <FlaskConical className="w-3.5 h-3.5" />
-            Test DB Connection
+            Test DB
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

@@ -25,37 +25,60 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing message or studentId' }, { status: 400 });
         }
 
-        // 1. Fetch Context (Student + Strategy)
-        const { data: student, error } = await supabase
+        // 1. Fetch Student Context
+        const { data: student, error: studentError } = await supabase
             .from('students')
             .select('full_name, country_code, instructor_strategy, tags')
             .eq('id', studentId)
             .single();
 
-        if (error || !student) {
-            console.error('Supabase error:', error);
+        if (studentError || !student) {
+            console.error('Supabase error:', studentError);
             return NextResponse.json({ error: 'Student not found' }, { status: 404 });
         }
 
+        // 2. Fetch Instructor Persona/Settings
+        const { data: settings } = await supabase
+            .from('settings')
+            .select('instructor_profile, writing_style')
+            .limit(1)
+            .single();
+
+        // Build persona section (use defaults if no settings)
+        const instructorProfile = settings?.instructor_profile || 'A piano teacher';
+        const writingStyle = settings?.writing_style || 'Professional and friendly';
+
+        // 3. Build the "Anti-Robot" System Prompt
         const systemPrompt = `
-You are an expert piano teaching assistant.
-You are helping the instructor reply to a student named: ${student.full_name} (${student.country_code || 'Unknown'}).
+You are speaking AS ME, the instructor. I am: ${instructorProfile}
 
-CRITICAL INSTRUCTION FROM TEACHER (The "Strategy"):
-"${student.instructor_strategy || 'No specific strategy set. Be helpful and encouraging.'}"
+MY WRITING STYLE (CRITICAL - YOU MUST FOLLOW THIS):
+${writingStyle}
 
-Context Tags: ${student.tags?.join(', ') || 'None'}
+RULES FOR AUTHENTICITY:
+1. ABSOLUTELY NO sales-y language like "I'd love to!", "Great to hear!", "I hope you're well!"
+2. Be brief and direct. I am busy.
+3. ${writingStyle.toLowerCase().includes('typo') ? 'Occasionally miss a capitalization or make a tiny grammar slip to sound human.' : ''}
+4. ${writingStyle.toLowerCase().includes('exclamation') || writingStyle.toLowerCase().includes('!') ? 'Never use exclamation marks (!) unless absolutely necessary.' : ''}
+5. Get straight to the point. No fluff.
 
-Task: Answer the instructor's question or draft a reply based on the strategy above.
-Keep it concise and helpful. Format your response in a conversational way.
+STUDENT CONTEXT (${student.full_name}):
+- Location: ${student.country_code || 'Unknown'}
+- My Strategy for them: "${student.instructor_strategy || 'None set'}"
+- Tags: ${student.tags?.join(', ') || 'None'}
+
+TASK: ${message}
+
+Write the response AS ME, following my writing style exactly.
         `.trim();
 
         let replyText = '';
 
-        // 2. Switch based on the selected Provider
+        // 4. Switch based on the selected Provider
         if (provider === 'openai') {
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o",
+                max_tokens: 500, // Keep emails short
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: message }
@@ -67,7 +90,7 @@ Keep it concise and helpful. Format your response in a conversational way.
         else if (provider === 'claude') {
             const msg = await anthropic.messages.create({
                 model: "claude-sonnet-4-20250514",
-                max_tokens: 1024,
+                max_tokens: 500, // Keep emails short
                 system: systemPrompt,
                 messages: [{ role: "user", content: message }],
             });
@@ -83,11 +106,16 @@ Keep it concise and helpful. Format your response in a conversational way.
             const chat = model.startChat({
                 history: [
                     { role: "user", parts: [{ text: systemPrompt }] },
-                    { role: "model", parts: [{ text: "Understood. I have internalized the strategy for this student." }] }
+                    { role: "model", parts: [{ text: "got it. writing as you now." }] }
                 ],
             });
             const result = await chat.sendMessage(message);
             replyText = result.response.text();
+        }
+
+        // 5. Optional "Humanizer" - randomly lowercase first letter
+        if (writingStyle.toLowerCase().includes('lowercase') && Math.random() > 0.6) {
+            replyText = replyText.charAt(0).toLowerCase() + replyText.slice(1);
         }
 
         return NextResponse.json({ reply: replyText, provider });

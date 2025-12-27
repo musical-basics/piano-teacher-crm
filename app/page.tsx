@@ -8,6 +8,7 @@ import { ConversationPane } from "@/components/crm/conversation-pane"
 import { CopilotPane } from "@/components/crm/copilot-pane"
 import { AddStudentModal } from "@/components/crm/add-student-modal"
 import { EditStudentModal } from "@/components/crm/edit-student-modal"
+import { SettingsModal } from "@/components/crm/settings-modal"
 import type { Student, Message } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
 import DebugSupabase from "@/components/DebugSupabase"
@@ -43,6 +44,7 @@ export default function CRMDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDebugOpen, setIsDebugOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
   const [sidebarWidth, setSidebarWidth] = useState(280)
@@ -256,6 +258,7 @@ export default function CRMDashboard() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenDebug={() => setIsDebugOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       </div>
 
@@ -300,6 +303,11 @@ export default function CRMDashboard() {
           onSave={handleUpdateStudent}
         />
       )}
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   )
 }
