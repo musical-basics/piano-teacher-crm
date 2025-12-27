@@ -1,18 +1,27 @@
 "use client"
 
-import { Sparkles, Globe, Pencil, Send, Loader2 } from "lucide-react"
+import { Sparkles, Globe, Pencil, Send, Loader2, ChevronDown } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
 
+type AIProvider = 'gemini' | 'openai' | 'claude'
+
 interface ChatMessage {
   role: "user" | "assistant"
   content: string
+  provider?: AIProvider
 }
 
 interface CopilotPaneProps {
   student: Student
   onEditStudent?: () => void
+}
+
+const providerConfig = {
+  gemini: { name: 'Gemini 2.0', color: 'bg-gradient-to-br from-indigo-500 to-teal-400', icon: '✨' },
+  openai: { name: 'GPT-4o', color: 'bg-gradient-to-br from-green-500 to-emerald-400', icon: '🤖' },
+  claude: { name: 'Claude Sonnet 4', color: 'bg-gradient-to-br from-orange-500 to-amber-400', icon: '🧠' },
 }
 
 export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
@@ -21,6 +30,8 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [provider, setProvider] = useState<AIProvider>('gemini')
+  const [isProviderOpen, setIsProviderOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Reset state when student changes
@@ -56,7 +67,7 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     }
   }
 
-  // Send message to Gemini API
+  // Send message to AI API
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
 
@@ -68,12 +79,13 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/gemini", {
+      const response = await fetch("/api/ai-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage,
           studentId: student.id,
+          provider: provider,
         }),
       })
 
@@ -82,19 +94,19 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
       if (data.error) {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `Error: ${data.error}` },
+          { role: "assistant", content: `Error: ${data.error}`, provider },
         ])
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: data.reply },
+          { role: "assistant", content: data.reply, provider: data.provider || provider },
         ])
       }
     } catch (error) {
-      console.error("Error calling Gemini:", error)
+      console.error("Error calling AI:", error)
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
+        { role: "assistant", content: "Sorry, I encountered an error. Please try again.", provider },
       ])
     } finally {
       setIsLoading(false)
@@ -134,7 +146,7 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-medium text-indigo-600 uppercase tracking-wide flex items-center gap-1.5">
             <Sparkles className="w-3 h-3" />
-            Strategy for Gemini
+            Strategy for AI
           </h3>
           {isSaving && (
             <span className="text-xs text-slate-400 flex items-center gap-1">
@@ -183,13 +195,45 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
 
       {/* Chat Section */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Copilot Header */}
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-teal-400 flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-white" />
+        {/* Copilot Header with Provider Selector */}
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-7 h-7 rounded-xl ${providerConfig[provider].color} flex items-center justify-center`}>
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="font-medium text-slate-700 text-sm">AI Co-Pilot</span>
           </div>
-          <span className="font-medium text-slate-700 text-sm">Gemini Co-Pilot</span>
-          <span className="text-[10px] text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">Live</span>
+
+          {/* Provider Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsProviderOpen(!isProviderOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+            >
+              <span>{providerConfig[provider].icon}</span>
+              <span>{providerConfig[provider].name}</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {isProviderOpen && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                {(Object.keys(providerConfig) as AIProvider[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      setProvider(p)
+                      setIsProviderOpen(false)
+                    }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 ${provider === p ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700'
+                      }`}
+                  >
+                    <span>{providerConfig[p].icon}</span>
+                    <span>{providerConfig[p].name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Chat Messages */}
@@ -218,8 +262,8 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
               )}
               <div
                 className={`flex-1 p-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user"
-                    ? "bg-indigo-500 text-white ml-8"
-                    : "bg-slate-100 text-slate-700 mr-8"
+                  ? "bg-indigo-500 text-white ml-8"
+                  : "bg-slate-100 text-slate-700 mr-8"
                   }`}
               >
                 {msg.content}
