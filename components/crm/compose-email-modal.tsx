@@ -1,10 +1,8 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react"
 import {
-    X, Send, Bold, Italic, Underline, List, ListOrdered,
-    Link, Smile, Undo, Redo, AlignLeft, AlignCenter, AlignRight,
-    Minimize2, Maximize2, Paperclip, Save, Loader2, Trash2,
-    File, Image as ImageIcon, Music, FileText, ChevronDown
+    X, Minus, Send, Bold, Italic, Underline, List, ListOrdered,
+    Link, Minimize2, Maximize2, Paperclip, Loader2, Trash2
 } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -25,13 +23,14 @@ interface ComposeEmailModalProps {
 
 export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModalProps) {
     // --- STATE ---
-    const [subject, setSubject] = useState("")
-    const [content, setContent] = useState("") // HTML content
+    const [subject, setSubject] = useState("Re: Lesson Follow-up")
+    const [content, setContent] = useState("")
     const [draftId, setDraftId] = useState<string | null>(null)
     const [attachments, setAttachments] = useState<Attachment[]>([])
 
     // --- UI STATE ---
     const [isMinimized, setIsMinimized] = useState(false)
+    const [isMaximized, setIsMaximized] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [isLoadingDraft, setIsLoadingDraft] = useState(false)
@@ -40,14 +39,12 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
     const editorRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // --- 1. LOAD DRAFT ON OPEN (The Logic Fix) ---
+    // --- 1. LOAD DRAFT ON OPEN ---
     useEffect(() => {
         if (!isOpen || !student.id) return
 
         const loadDraft = async () => {
             setIsLoadingDraft(true)
-
-            // Fetch existing draft for this student (get the most recent one)
             const { data } = await supabase
                 .from('drafts')
                 .select('*')
@@ -58,18 +55,16 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
             const draft = data && data.length > 0 ? data[0] : null
 
             if (draft) {
-                // Draft found! Fill the UI
                 setDraftId(draft.id)
-                setSubject(draft.subject || "")
+                setSubject(draft.subject || "Re: Lesson Follow-up")
                 setContent(draft.content || "")
                 if (editorRef.current) {
                     editorRef.current.innerHTML = draft.content || ""
                 }
                 setLastSaved(new Date(draft.updated_at))
             } else {
-                // No draft? Clear the UI
                 setDraftId(null)
-                setSubject("")
+                setSubject("Re: Lesson Follow-up")
                 setContent("")
                 setAttachments([])
                 if (editorRef.current) editorRef.current.innerHTML = ""
@@ -81,7 +76,7 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
         loadDraft()
     }, [isOpen, student.id])
 
-    // --- 2. EDITOR COMMANDS (Toolbar Logic) ---
+    // --- 2. EDITOR COMMANDS ---
     const execCommand = (command: string, value?: string) => {
         document.execCommand(command, false, value)
         editorRef.current?.focus()
@@ -90,7 +85,6 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
     // --- 3. SAVE LOGIC ---
     const saveDraft = useCallback(async () => {
         const htmlContent = editorRef.current?.innerHTML || content
-        // Don't save empty/blank drafts
         if (!htmlContent.trim() && !subject.trim()) return
 
         setIsSaving(true)
@@ -101,7 +95,6 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
                 content: htmlContent,
                 updated_at: new Date().toISOString()
             }
-
 
             let currentDraftId = draftId
 
@@ -125,8 +118,6 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
     // --- 4. ATTACHMENT LOGIC ---
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return
-
-        // Ensure we have a draft ID first
         if (!draftId) await saveDraft()
 
         setIsUploading(true)
@@ -137,16 +128,12 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
             const { error: uploadErr } = await supabase.storage.from('attachments').upload(filePath, file)
             if (uploadErr) throw uploadErr
 
-            // Add to UI
-            const newAtt = {
+            setAttachments(prev => [...prev, {
                 file_name: file.name,
                 file_size: file.size,
                 file_type: file.type,
                 storage_path: filePath
-            }
-            setAttachments(prev => [...prev, newAtt])
-
-            // You would typically save this link to DB here if your schema requires it
+            }])
         } catch (err) {
             console.error(err)
         } finally {
@@ -154,155 +141,256 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
         }
     }
 
+    const handleDiscard = async () => {
+        if (draftId) await supabase.from('drafts').delete().eq('id', draftId)
+        onClose()
+    }
+
+    const handleClose = async () => {
+        await saveDraft()
+        onClose()
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            // handleSend() - would go here when send is wired
+        }
+    }
+
     // --- RENDER ---
     if (!isOpen && !isMinimized) return null
 
-    return (
-        <div className={`fixed bottom-0 right-8 bg-white shadow-2xl border border-slate-200 rounded-t-xl z-50 flex flex-col font-sans transition-all duration-300
-            ${isMinimized ? 'w-72 h-12' : 'w-[600px] h-[650px]'}`}
-        >
-            {/* --- HEADER --- */}
-            <div
-                className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white rounded-t-xl cursor-pointer"
-                onClick={() => setIsMinimized(!isMinimized)}
-            >
-                <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">New Message</span>
-                    {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
-                    {!isSaving && lastSaved && <span className="text-[10px] text-slate-400">Saved</span>}
-                </div>
-                <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized) }} className="p-1 hover:bg-slate-700 rounded">
-                        {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
-                    </button>
-                    <button onClick={async (e) => { e.stopPropagation(); await saveDraft(); onClose() }} className="p-1 hover:bg-slate-700 rounded">
-                        <X size={14} />
-                    </button>
+    // Minimized state
+    if (isMinimized) {
+        return (
+            <div className="fixed bottom-0 right-6 w-72 bg-white rounded-t-xl shadow-2xl border border-slate-200 z-50">
+                <div
+                    className="flex items-center justify-between px-4 py-3 bg-slate-800 rounded-t-xl cursor-pointer"
+                    onClick={() => setIsMinimized(false)}
+                >
+                    <span className="text-sm font-medium text-white truncate">
+                        New Message - {student.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsMinimized(false) }}
+                            className="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300"
+                        >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleClose() }}
+                            className="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
                 </div>
             </div>
+        )
+    }
 
-            {/* --- BODY --- */}
-            {!isMinimized && (
-                <div className="flex-1 flex flex-col relative">
-                    {isLoadingDraft && (
-                        <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center">
-                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                        </div>
-                    )}
+    // Full modal
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={handleClose} />
 
-                    {/* Metadata */}
-                    <div className="px-4 py-2 border-b border-slate-100 flex flex-col gap-1 bg-slate-50/50">
-                        <div className="flex items-center text-sm">
-                            <span className="text-slate-500 w-16 text-xs font-bold uppercase tracking-wider">To</span>
-                            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs font-medium">
-                                {student.name}
-                            </span>
-                        </div>
-                        <div className="flex items-center text-sm">
-                            <span className="text-slate-500 w-16 text-xs font-bold uppercase tracking-wider">Subject</span>
-                            <input
-                                className="flex-1 bg-transparent focus:outline-none text-slate-800 font-medium placeholder-slate-300"
-                                placeholder="Subject"
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
-                                onBlur={saveDraft}
-                            />
-                        </div>
+            {/* Modal */}
+            <div
+                className={`relative bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${isMaximized ? "w-[90vw] h-[90vh]" : "w-[600px] h-[500px]"
+                    }`}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-800 rounded-t-2xl">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white">New Message</span>
+                        {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                        {!isSaving && lastSaved && (
+                            <span className="text-[10px] text-slate-400">Saved</span>
+                        )}
                     </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setIsMinimized(true)}
+                            className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                            title="Minimize"
+                        >
+                            <Minus className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setIsMaximized(!isMaximized)}
+                            className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                            title={isMaximized ? "Restore" : "Maximize"}
+                        >
+                            {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                        </button>
+                        <button
+                            onClick={handleClose}
+                            className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                            title="Close"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
 
-                    {/* Rich Text Editor */}
+                {/* Loading Overlay */}
+                {isLoadingDraft && (
+                    <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center rounded-2xl">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                    </div>
+                )}
+
+                {/* To field */}
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-400 w-16">To</span>
+                    <div className="flex-1 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-sm text-slate-700">
+                            {student.name}
+                            <button className="w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    </div>
+                </div>
+
+                {/* Subject field */}
+                <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
+                    <span className="text-sm text-slate-400 w-16">Subject</span>
+                    <input
+                        type="text"
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        onBlur={saveDraft}
+                        placeholder="Subject"
+                        className="flex-1 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none"
+                    />
+                </div>
+
+                {/* Body - Rich Text Editor */}
+                <div className="flex-1 p-5 overflow-hidden">
                     <div
                         ref={editorRef}
                         contentEditable
-                        className="flex-1 p-5 focus:outline-none text-slate-700 leading-relaxed overflow-y-auto text-sm"
+                        onKeyDown={handleKeyDown}
                         onInput={(e) => setContent(e.currentTarget.innerHTML)}
                         onBlur={saveDraft}
+                        data-placeholder="Write your message..."
+                        className="w-full h-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none leading-relaxed overflow-y-auto"
                         style={{ whiteSpace: "pre-wrap" }}
                     />
+                </div>
 
-                    {/* Attachments Area */}
-                    {attachments.length > 0 && (
-                        <div className="px-4 py-2 flex flex-wrap gap-2 bg-slate-50 border-t border-slate-100">
-                            {attachments.map((file, i) => (
-                                <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs shadow-sm">
-                                    <Paperclip size={12} className="text-indigo-400" />
-                                    <span className="max-w-[120px] truncate font-medium text-slate-600">{file.file_name}</span>
-                                    <button className="text-slate-300 hover:text-red-500"><X size={12} /></button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                {/* Attachments Area */}
+                {attachments.length > 0 && (
+                    <div className="px-5 py-2 flex flex-wrap gap-2 border-t border-slate-100">
+                        {attachments.map((file, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs">
+                                <Paperclip className="w-3 h-3 text-slate-400" />
+                                <span className="max-w-[120px] truncate text-slate-600">{file.file_name}</span>
+                                <button className="text-slate-400 hover:text-red-500">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
-                    {/* --- THE TOOLBAR (Gmail Style) --- */}
-                    <div className="p-2 border-t border-slate-200 bg-white flex flex-col gap-2">
+                {/* Footer toolbar */}
+                <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center gap-1">
+                        {/* Send button */}
+                        <button
+                            disabled={!content.trim()}
+                            className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Send
+                            <Send className="w-4 h-4" />
+                        </button>
 
-                        {/* Send & Trash Row */}
-                        <div className="flex items-center justify-between mb-1 px-1">
-                            <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md shadow-indigo-200 transition-all">
-                                Send <Send size={14} />
+                        {/* Formatting tools */}
+                        <div className="flex items-center ml-3 pl-3 border-l border-slate-200">
+                            <button
+                                onClick={() => execCommand('bold')}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Bold"
+                            >
+                                <Bold className="w-4 h-4" />
                             </button>
                             <button
-                                onClick={async () => {
-                                    if (draftId) await supabase.from('drafts').delete().eq('id', draftId);
-                                    onClose();
+                                onClick={() => execCommand('italic')}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Italic"
+                            >
+                                <Italic className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => execCommand('underline')}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Underline"
+                            >
+                                <Underline className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const url = prompt("Enter URL:")
+                                    if (url) execCommand('createLink', url)
                                 }}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Insert Link"
                             >
-                                <Trash2 size={16} />
+                                <Link className="w-4 h-4" />
                             </button>
-                        </div>
-
-                        {/* Formatting Row */}
-                        <div className="flex items-center gap-1 flex-wrap">
-                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
-                                <ToolbarBtn icon={<Bold size={14} />} onClick={() => execCommand('bold')} title="Bold" />
-                                <ToolbarBtn icon={<Italic size={14} />} onClick={() => execCommand('italic')} title="Italic" />
-                                <ToolbarBtn icon={<Underline size={14} />} onClick={() => execCommand('underline')} title="Underline" />
-                            </div>
-
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
-                                <ToolbarBtn icon={<AlignLeft size={14} />} onClick={() => execCommand('justifyLeft')} title="Align Left" />
-                                <ToolbarBtn icon={<AlignCenter size={14} />} onClick={() => execCommand('justifyCenter')} title="Align Center" />
-                                <ToolbarBtn icon={<AlignRight size={14} />} onClick={() => execCommand('justifyRight')} title="Align Right" />
-                            </div>
-
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
-                                <ToolbarBtn icon={<List size={14} />} onClick={() => execCommand('insertUnorderedList')} title="Bullet List" />
-                                <ToolbarBtn icon={<ListOrdered size={14} />} onClick={() => execCommand('insertOrderedList')} title="Number List" />
-                            </div>
-
-                            <div className="flex-1" />
-
-                            {/* Attach Button */}
                             <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors relative"
-                                title="Attach File"
+                                onClick={() => execCommand('insertUnorderedList')}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Bullet List"
                             >
-                                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
-                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} multiple />
+                                <List className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => execCommand('insertOrderedList')}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Numbered List"
+                            >
+                                <ListOrdered className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
-    )
-}
 
-// Helper for cleaner buttons
-function ToolbarBtn({ icon, onClick, title }: { icon: React.ReactNode, onClick: () => void, title: string }) {
-    return (
-        <button
-            onClick={onClick}
-            title={title}
-            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
-        >
-            {icon}
-        </button>
+                    <div className="flex items-center gap-1">
+                        {/* Attach */}
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                            title="Attach files"
+                        >
+                            {isUploading ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Paperclip className="w-5 h-5" />
+                            )}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                className="hidden"
+                                onChange={handleFileSelect}
+                                multiple
+                            />
+                        </button>
+                        {/* Delete */}
+                        <button
+                            onClick={handleDiscard}
+                            className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                            title="Discard draft"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     )
 }
