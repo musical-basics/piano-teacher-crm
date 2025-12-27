@@ -70,8 +70,8 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
                   <button
                     onClick={() => setViewingOriginal(viewingOriginal === msg.id ? null : msg.id)}
                     className={`absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${viewingOriginal === msg.id
-                        ? "bg-indigo-100 text-indigo-600"
-                        : "bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100"
+                      ? "bg-indigo-100 text-indigo-600"
+                      : "bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100"
                       } hover:bg-indigo-100 hover:text-indigo-600`}
                     title="View original email"
                   >
@@ -140,9 +140,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
       <ComposeEmailModal
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
-        onSend={handleSend}
         student={student}
-        initialContent={message}
       />
     </div>
   )

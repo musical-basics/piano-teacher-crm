@@ -1,11 +1,10 @@
 "use client"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import {
     X, Send, Bold, Italic, Underline, List, ListOrdered,
     Link, Smile, Undo, Redo, AlignLeft, AlignCenter, AlignRight,
-    ChevronDown, Trash2, Minimize2, Maximize2, Paperclip, Save, Loader2,
-    FileText, Music, Image as ImageIcon, File
+    Minimize2, Maximize2, Paperclip, Save, Loader2, Trash2,
+    File, Image as ImageIcon, Music, FileText, ChevronDown
 } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -16,554 +15,294 @@ interface Attachment {
     file_size: number
     file_type: string
     storage_path: string
-    file?: File
 }
 
 interface ComposeEmailModalProps {
     isOpen: boolean
     onClose: () => void
-    onSend: (content: string, subject: string, attachments?: Attachment[]) => void
     student: Student
-    initialContent?: string
-    draftId?: string
 }
 
-export function ComposeEmailModal({
-    isOpen,
-    onClose,
-    onSend,
-    student,
-    initialContent = "",
-    draftId: initialDraftId
-}: ComposeEmailModalProps) {
+export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModalProps) {
+    // --- STATE ---
     const [subject, setSubject] = useState("")
-    const [content, setContent] = useState(initialContent)
-    const [isMinimized, setIsMinimized] = useState(false)
-    const [showCcBcc, setShowCcBcc] = useState(false)
-    const [cc, setCc] = useState("")
-    const [bcc, setBcc] = useState("")
+    const [content, setContent] = useState("") // HTML content
+    const [draftId, setDraftId] = useState<string | null>(null)
     const [attachments, setAttachments] = useState<Attachment[]>([])
+
+    // --- UI STATE ---
+    const [isMinimized, setIsMinimized] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
-    const [draftId, setDraftId] = useState<string | undefined>(initialDraftId)
+    const [isLoadingDraft, setIsLoadingDraft] = useState(false)
     const [lastSaved, setLastSaved] = useState<Date | null>(null)
+
     const editorRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
+    // --- 1. LOAD DRAFT ON OPEN (The Logic Fix) ---
     useEffect(() => {
-        if (isOpen && editorRef.current) {
-            editorRef.current.innerHTML = initialContent
-        }
-    }, [isOpen, initialContent])
+        if (!isOpen || !student.id) return
 
-    useEffect(() => {
-        if (isOpen) {
-            setContent(initialContent)
-            setSubject("")
-            setAttachments([])
-            setDraftId(initialDraftId)
-            setLastSaved(null)
-        }
-    }, [isOpen, initialContent, initialDraftId])
+        const loadDraft = async () => {
+            setIsLoadingDraft(true)
 
-    // Auto-save draft periodically
-    const saveDraft = useCallback(async () => {
-        const htmlContent = editorRef.current?.innerHTML || content
-        if (!htmlContent.trim() && !subject.trim()) return
+            // Fetch existing draft for this student (get the most recent one)
+            const { data } = await supabase
+                .from('drafts')
+                .select('*')
+                .eq('student_id', student.id)
+                .order('updated_at', { ascending: false })
+                .limit(1)
 
-        setIsSaving(true)
-        try {
-            if (draftId) {
-                // Update existing draft
-                const { error } = await supabase
-                    .from('drafts')
-                    .update({
-                        subject,
-                        content: htmlContent,
-                        cc,
-                        bcc,
-                    })
-                    .eq('id', draftId)
+            const draft = data && data.length > 0 ? data[0] : null
 
-                if (error) throw error
+            if (draft) {
+                // Draft found! Fill the UI
+                setDraftId(draft.id)
+                setSubject(draft.subject || "")
+                setContent(draft.content || "")
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = draft.content || ""
+                }
+                setLastSaved(new Date(draft.updated_at))
             } else {
-                // Create new draft
-                const { data, error } = await supabase
-                    .from('drafts')
-                    .insert({
-                        student_id: student.id,
-                        subject,
-                        content: htmlContent,
-                        cc,
-                        bcc,
-                    })
-                    .select()
-                    .single()
-
-                if (error) throw error
-                setDraftId(data.id)
+                // No draft? Clear the UI
+                setDraftId(null)
+                setSubject("")
+                setContent("")
+                setAttachments([])
+                if (editorRef.current) editorRef.current.innerHTML = ""
+                setLastSaved(null)
             }
-            setLastSaved(new Date())
-        } catch (error) {
-            console.error('Error saving draft:', error)
-        } finally {
-            setIsSaving(false)
-        }
-    }, [content, subject, cc, bcc, draftId, student.id])
-
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files
-        if (!files || files.length === 0) return
-
-        setIsUploading(true)
-        try {
-            for (const file of Array.from(files)) {
-                // Generate unique path
-                const timestamp = Date.now()
-                const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-                const storagePath = `${student.id}/${timestamp}_${safeName}`
-
-                // Upload to Supabase Storage
-                const { error: uploadError } = await supabase.storage
-                    .from('attachments')
-                    .upload(storagePath, file)
-
-                if (uploadError) {
-                    console.error('Upload error:', uploadError)
-                    continue
-                }
-
-                // Add to attachments list
-                const newAttachment: Attachment = {
-                    file_name: file.name,
-                    file_size: file.size,
-                    file_type: file.type,
-                    storage_path: storagePath,
-                    file: file
-                }
-
-                setAttachments(prev => [...prev, newAttachment])
-
-                // Save to database if we have a draft
-                if (draftId) {
-                    await supabase.from('attachments').insert({
-                        draft_id: draftId,
-                        file_name: file.name,
-                        file_size: file.size,
-                        file_type: file.type,
-                        storage_path: storagePath,
-                    })
-                }
-            }
-        } catch (error) {
-            console.error('Error uploading file:', error)
-        } finally {
-            setIsUploading(false)
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ''
-            }
-        }
-    }
-
-    const removeAttachment = async (index: number) => {
-        const attachment = attachments[index]
-
-        // Remove from storage
-        try {
-            await supabase.storage
-                .from('attachments')
-                .remove([attachment.storage_path])
-        } catch (error) {
-            console.error('Error removing file:', error)
+            setIsLoadingDraft(false)
         }
 
-        setAttachments(prev => prev.filter((_, i) => i !== index))
-    }
+        loadDraft()
+    }, [isOpen, student.id])
 
-    const getFileIcon = (type: string) => {
-        if (type.startsWith('image/')) return <ImageIcon className="w-4 h-4" />
-        if (type.startsWith('audio/')) return <Music className="w-4 h-4" />
-        if (type === 'application/pdf') return <FileText className="w-4 h-4" />
-        return <File className="w-4 h-4" />
-    }
-
-    const formatFileSize = (bytes: number) => {
-        if (bytes < 1024) return `${bytes} B`
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    }
-
-    if (!isOpen) return null
-
-    const handleSend = async () => {
-        const htmlContent = editorRef.current?.innerHTML || content
-        if (htmlContent.trim()) {
-            onSend(htmlContent, subject, attachments)
-
-            // Delete draft after sending
-            if (draftId) {
-                await supabase.from('drafts').delete().eq('id', draftId)
-            }
-
-            setContent("")
-            setSubject("")
-            setAttachments([])
-            setDraftId(undefined)
-            if (editorRef.current) {
-                editorRef.current.innerHTML = ""
-            }
-            onClose()
-        }
-    }
-
-    const handleDiscard = async () => {
-        // Delete draft and attachments
-        if (draftId) {
-            // Delete attachments from storage
-            for (const attachment of attachments) {
-                await supabase.storage.from('attachments').remove([attachment.storage_path])
-            }
-            await supabase.from('drafts').delete().eq('id', draftId)
-        }
-        onClose()
-    }
-
+    // --- 2. EDITOR COMMANDS (Toolbar Logic) ---
     const execCommand = (command: string, value?: string) => {
         document.execCommand(command, false, value)
         editorRef.current?.focus()
     }
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        // Ctrl/Cmd + Enter to send
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            handleSend()
+    // --- 3. SAVE LOGIC ---
+    const saveDraft = useCallback(async () => {
+        const htmlContent = editorRef.current?.innerHTML || content
+        // Don't save empty/blank drafts
+        if (!htmlContent.trim() && !subject.trim()) return
+
+        setIsSaving(true)
+        try {
+            const draftData = {
+                student_id: student.id,
+                subject,
+                content: htmlContent,
+                updated_at: new Date().toISOString()
+            }
+
+
+            let currentDraftId = draftId
+
+            if (currentDraftId) {
+                await supabase.from('drafts').update(draftData).eq('id', currentDraftId)
+            } else {
+                const { data } = await supabase.from('drafts').insert(draftData).select().single()
+                if (data) {
+                    setDraftId(data.id)
+                    currentDraftId = data.id
+                }
+            }
+            setLastSaved(new Date())
+        } catch (error) {
+            console.error('Save failed:', error)
+        } finally {
+            setIsSaving(false)
         }
-        // Ctrl/Cmd + S to save draft
-        if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            saveDraft()
+    }, [content, subject, draftId, student.id])
+
+    // --- 4. ATTACHMENT LOGIC ---
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.length) return
+
+        // Ensure we have a draft ID first
+        if (!draftId) await saveDraft()
+
+        setIsUploading(true)
+        const file = e.target.files[0]
+        const filePath = `${student.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+
+        try {
+            const { error: uploadErr } = await supabase.storage.from('attachments').upload(filePath, file)
+            if (uploadErr) throw uploadErr
+
+            // Add to UI
+            const newAtt = {
+                file_name: file.name,
+                file_size: file.size,
+                file_type: file.type,
+                storage_path: filePath
+            }
+            setAttachments(prev => [...prev, newAtt])
+
+            // You would typically save this link to DB here if your schema requires it
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setIsUploading(false)
         }
     }
 
-    if (isMinimized) {
-        return (
-            <div className="fixed bottom-0 right-6 w-72 bg-white rounded-t-lg shadow-2xl border border-slate-200 z-50">
-                <div
-                    className="flex items-center justify-between px-4 py-3 bg-slate-800 text-white rounded-t-lg cursor-pointer"
-                    onClick={() => setIsMinimized(false)}
-                >
-                    <span className="text-sm font-medium truncate">New Message - {student.name}</span>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
-                            className="p-1 hover:bg-slate-700 rounded"
-                        >
-                            <Maximize2 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onClose(); }}
-                            className="p-1 hover:bg-slate-700 rounded"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
+    // --- RENDER ---
+    if (!isOpen && !isMinimized) return null
 
     return (
-        <div className="fixed bottom-0 right-6 w-[560px] bg-white rounded-t-xl shadow-2xl border border-slate-200 z-50 flex flex-col max-h-[80vh]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-800 text-white rounded-t-xl">
+        <div className={`fixed bottom-0 right-8 bg-white shadow-2xl border border-slate-200 rounded-t-xl z-50 flex flex-col font-sans transition-all duration-300
+            ${isMinimized ? 'w-72 h-12' : 'w-[600px] h-[650px]'}`}
+        >
+            {/* --- HEADER --- */}
+            <div
+                className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white rounded-t-xl cursor-pointer"
+                onClick={() => setIsMinimized(!isMinimized)}
+            >
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">New Message</span>
-                    {isSaving && (
-                        <span className="flex items-center gap-1 text-xs text-slate-400">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Saving...
-                        </span>
-                    )}
-                    {lastSaved && !isSaving && (
-                        <span className="text-xs text-slate-400">
-                            Saved {lastSaved.toLocaleTimeString()}
-                        </span>
-                    )}
+                    <span className="font-medium text-sm">New Message</span>
+                    {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                    {!isSaving && lastSaved && <span className="text-[10px] text-slate-400">Saved</span>}
                 </div>
                 <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => setIsMinimized(true)}
-                        className="p-1.5 hover:bg-slate-700 rounded transition-colors"
-                        title="Minimize"
-                    >
-                        <Minimize2 className="w-4 h-4" />
+                    <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized) }} className="p-1 hover:bg-slate-700 rounded">
+                        {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
                     </button>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 hover:bg-slate-700 rounded transition-colors"
-                        title="Close"
-                    >
-                        <X className="w-4 h-4" />
+                    <button onClick={async (e) => { e.stopPropagation(); await saveDraft(); onClose() }} className="p-1 hover:bg-slate-700 rounded">
+                        <X size={14} />
                     </button>
                 </div>
             </div>
 
-            {/* To Field */}
-            <div className="flex items-center px-4 py-2 border-b border-slate-200">
-                <span className="text-sm text-slate-500 w-12">To</span>
-                <div className="flex-1 flex items-center gap-2">
-                    <div className="px-2 py-1 bg-slate-100 rounded text-sm text-slate-700 flex items-center gap-1">
-                        {student.name}
-                        <span className="text-slate-400">&lt;{student.email}&gt;</span>
-                    </div>
-                </div>
-                <button
-                    onClick={() => setShowCcBcc(!showCcBcc)}
-                    className="text-sm text-slate-500 hover:text-slate-700"
-                >
-                    Cc Bcc
-                </button>
-            </div>
-
-            {/* Cc/Bcc Fields */}
-            {showCcBcc && (
-                <>
-                    <div className="flex items-center px-4 py-2 border-b border-slate-200">
-                        <span className="text-sm text-slate-500 w-12">Cc</span>
-                        <input
-                            type="text"
-                            value={cc}
-                            onChange={(e) => setCc(e.target.value)}
-                            className="flex-1 text-sm text-slate-700 focus:outline-none"
-                            placeholder="Add Cc recipients"
-                        />
-                    </div>
-                    <div className="flex items-center px-4 py-2 border-b border-slate-200">
-                        <span className="text-sm text-slate-500 w-12">Bcc</span>
-                        <input
-                            type="text"
-                            value={bcc}
-                            onChange={(e) => setBcc(e.target.value)}
-                            className="flex-1 text-sm text-slate-700 focus:outline-none"
-                            placeholder="Add Bcc recipients"
-                        />
-                    </div>
-                </>
-            )}
-
-            {/* Subject */}
-            <div className="flex items-center px-4 py-2 border-b border-slate-200">
-                <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="flex-1 text-sm text-slate-700 focus:outline-none"
-                    placeholder="Subject"
-                />
-            </div>
-
-            {/* Content Editor */}
-            <div
-                ref={editorRef}
-                contentEditable
-                onKeyDown={handleKeyDown}
-                className="flex-1 min-h-[160px] max-h-[300px] overflow-y-auto px-4 py-3 text-sm text-slate-700 focus:outline-none"
-                style={{ whiteSpace: "pre-wrap" }}
-                data-placeholder="Compose your email..."
-                onInput={(e) => setContent((e.target as HTMLDivElement).innerHTML)}
-            />
-
-            {/* Attachments */}
-            {attachments.length > 0 && (
-                <div className="px-4 py-2 border-t border-slate-100 bg-slate-50">
-                    <div className="flex flex-wrap gap-2">
-                        {attachments.map((attachment, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center gap-2 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                            >
-                                {getFileIcon(attachment.file_type)}
-                                <span className="max-w-[120px] truncate text-slate-700">{attachment.file_name}</span>
-                                <span className="text-slate-400">{formatFileSize(attachment.file_size)}</span>
-                                <button
-                                    onClick={() => removeAttachment(index)}
-                                    className="p-0.5 hover:bg-red-100 rounded text-slate-400 hover:text-red-600"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Formatting Toolbar */}
-            <div className="flex items-center gap-1 px-3 py-2 border-t border-slate-200 bg-slate-50 flex-wrap">
-                {/* Send Button */}
-                <button
-                    onClick={handleSend}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                    Send
-                    <ChevronDown className="w-4 h-4" />
-                </button>
-
-                <div className="w-px h-6 bg-slate-300 mx-2" />
-
-                {/* Text Formatting */}
-                <button
-                    onClick={() => execCommand("bold")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Bold (Ctrl+B)"
-                >
-                    <Bold className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("italic")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Italic (Ctrl+I)"
-                >
-                    <Italic className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("underline")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Underline (Ctrl+U)"
-                >
-                    <Underline className="w-4 h-4 text-slate-600" />
-                </button>
-
-                <div className="w-px h-6 bg-slate-300 mx-1" />
-
-                {/* Alignment */}
-                <button
-                    onClick={() => execCommand("justifyLeft")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Align left"
-                >
-                    <AlignLeft className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("justifyCenter")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Center"
-                >
-                    <AlignCenter className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("justifyRight")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Align right"
-                >
-                    <AlignRight className="w-4 h-4 text-slate-600" />
-                </button>
-
-                <div className="w-px h-6 bg-slate-300 mx-1" />
-
-                {/* Lists */}
-                <button
-                    onClick={() => execCommand("insertUnorderedList")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Bulleted list"
-                >
-                    <List className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("insertOrderedList")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Numbered list"
-                >
-                    <ListOrdered className="w-4 h-4 text-slate-600" />
-                </button>
-
-                <div className="w-px h-6 bg-slate-300 mx-1" />
-
-                {/* Attachment */}
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
-                    title="Attach files"
-                >
-                    {isUploading ? (
-                        <Loader2 className="w-4 h-4 text-slate-600 animate-spin" />
-                    ) : (
-                        <Paperclip className="w-4 h-4 text-slate-600" />
+            {/* --- BODY --- */}
+            {!isMinimized && (
+                <div className="flex-1 flex flex-col relative">
+                    {isLoadingDraft && (
+                        <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                        </div>
                     )}
-                </button>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-                />
 
-                {/* Link */}
-                <button
-                    onClick={() => {
-                        const url = prompt("Enter URL:")
-                        if (url) execCommand("createLink", url)
-                    }}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Insert link"
-                >
-                    <Link className="w-4 h-4 text-slate-600" />
-                </button>
+                    {/* Metadata */}
+                    <div className="px-4 py-2 border-b border-slate-100 flex flex-col gap-1 bg-slate-50/50">
+                        <div className="flex items-center text-sm">
+                            <span className="text-slate-500 w-16 text-xs font-bold uppercase tracking-wider">To</span>
+                            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs font-medium">
+                                {student.name}
+                            </span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                            <span className="text-slate-500 w-16 text-xs font-bold uppercase tracking-wider">Subject</span>
+                            <input
+                                className="flex-1 bg-transparent focus:outline-none text-slate-800 font-medium placeholder-slate-300"
+                                placeholder="Subject"
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                onBlur={saveDraft}
+                            />
+                        </div>
+                    </div>
 
-                {/* Emoji */}
-                <button
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Insert emoji"
-                >
-                    <Smile className="w-4 h-4 text-slate-600" />
-                </button>
+                    {/* Rich Text Editor */}
+                    <div
+                        ref={editorRef}
+                        contentEditable
+                        className="flex-1 p-5 focus:outline-none text-slate-700 leading-relaxed overflow-y-auto text-sm"
+                        onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                        onBlur={saveDraft}
+                        style={{ whiteSpace: "pre-wrap" }}
+                    />
 
-                {/* Spacer */}
-                <div className="flex-1" />
+                    {/* Attachments Area */}
+                    {attachments.length > 0 && (
+                        <div className="px-4 py-2 flex flex-wrap gap-2 bg-slate-50 border-t border-slate-100">
+                            {attachments.map((file, i) => (
+                                <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs shadow-sm">
+                                    <Paperclip size={12} className="text-indigo-400" />
+                                    <span className="max-w-[120px] truncate font-medium text-slate-600">{file.file_name}</span>
+                                    <button className="text-slate-300 hover:text-red-500"><X size={12} /></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
-                {/* Save Draft */}
-                <button
-                    onClick={saveDraft}
-                    disabled={isSaving}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
-                    title="Save draft (Ctrl+S)"
-                >
-                    <Save className="w-4 h-4 text-slate-600" />
-                </button>
+                    {/* --- THE TOOLBAR (Gmail Style) --- */}
+                    <div className="p-2 border-t border-slate-200 bg-white flex flex-col gap-2">
 
-                {/* Undo/Redo */}
-                <button
-                    onClick={() => execCommand("undo")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Undo"
-                >
-                    <Undo className="w-4 h-4 text-slate-600" />
-                </button>
-                <button
-                    onClick={() => execCommand("redo")}
-                    className="p-2 hover:bg-slate-200 rounded transition-colors"
-                    title="Redo"
-                >
-                    <Redo className="w-4 h-4 text-slate-600" />
-                </button>
+                        {/* Send & Trash Row */}
+                        <div className="flex items-center justify-between mb-1 px-1">
+                            <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md shadow-indigo-200 transition-all">
+                                Send <Send size={14} />
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (draftId) await supabase.from('drafts').delete().eq('id', draftId);
+                                    onClose();
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
 
-                {/* Delete */}
-                <button
-                    onClick={handleDiscard}
-                    className="p-2 hover:bg-red-100 rounded transition-colors"
-                    title="Discard draft"
-                >
-                    <Trash2 className="w-4 h-4 text-slate-600" />
-                </button>
-            </div>
+                        {/* Formatting Row */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
+                                <ToolbarBtn icon={<Bold size={14} />} onClick={() => execCommand('bold')} title="Bold" />
+                                <ToolbarBtn icon={<Italic size={14} />} onClick={() => execCommand('italic')} title="Italic" />
+                                <ToolbarBtn icon={<Underline size={14} />} onClick={() => execCommand('underline')} title="Underline" />
+                            </div>
 
-            {/* Keyboard shortcut hint */}
-            <div className="px-4 py-1.5 text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100">
-                <kbd className="px-1 py-0.5 bg-slate-200 rounded text-slate-600">Ctrl+Enter</kbd> send • <kbd className="px-1 py-0.5 bg-slate-200 rounded text-slate-600">Ctrl+S</kbd> save draft
-            </div>
+                            <div className="w-px h-6 bg-slate-200 mx-1" />
+
+                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
+                                <ToolbarBtn icon={<AlignLeft size={14} />} onClick={() => execCommand('justifyLeft')} title="Align Left" />
+                                <ToolbarBtn icon={<AlignCenter size={14} />} onClick={() => execCommand('justifyCenter')} title="Align Center" />
+                                <ToolbarBtn icon={<AlignRight size={14} />} onClick={() => execCommand('justifyRight')} title="Align Right" />
+                            </div>
+
+                            <div className="w-px h-6 bg-slate-200 mx-1" />
+
+                            <div className="flex items-center bg-slate-50 rounded-lg p-1 border border-slate-100">
+                                <ToolbarBtn icon={<List size={14} />} onClick={() => execCommand('insertUnorderedList')} title="Bullet List" />
+                                <ToolbarBtn icon={<ListOrdered size={14} />} onClick={() => execCommand('insertOrderedList')} title="Number List" />
+                            </div>
+
+                            <div className="flex-1" />
+
+                            {/* Attach Button */}
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors relative"
+                                title="Attach File"
+                            >
+                                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} multiple />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
+    )
+}
+
+// Helper for cleaner buttons
+function ToolbarBtn({ icon, onClick, title }: { icon: React.ReactNode, onClick: () => void, title: string }) {
+    return (
+        <button
+            onClick={onClick}
+            title={title}
+            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+        >
+            {icon}
+        </button>
     )
 }
