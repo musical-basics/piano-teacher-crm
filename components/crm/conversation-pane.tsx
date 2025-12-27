@@ -6,28 +6,36 @@ import { Send, Paperclip, Eye } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
+import { ComposeEmailModal } from "./compose-email-modal"
 
 interface ConversationPaneProps {
   student: Student
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, subject?: string) => void
 }
 
 export function ConversationPane({ student, onSendMessage }: ConversationPaneProps) {
   const [message, setMessage] = useState("")
   const [viewingOriginal, setViewingOriginal] = useState<string | null>(null)
+  const [isComposeOpen, setIsComposeOpen] = useState(false)
 
-  const handleSend = () => {
+  const handleOpenCompose = () => {
     if (message.trim()) {
-      onSendMessage(message.trim())
-      setMessage("")
+      setIsComposeOpen(true)
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleSend = (content: string, subject: string) => {
+    onSendMessage(content, subject)
+    setMessage("")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter without Shift opens compose modal
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      handleOpenCompose()
     }
+    // Shift+Enter allows new line (default textarea behavior)
   }
 
   return (
@@ -50,11 +58,10 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
             <div key={msg.id} className={`flex ${isInstructor ? "justify-end" : "justify-start"}`}>
               <div className="group relative max-w-[70%]">
                 <div
-                  className={`px-5 py-3 rounded-3xl ${
-                    isInstructor ? "bg-indigo-600 text-white" : "bg-white text-slate-700 shadow-sm"
-                  }`}
+                  className={`px-5 py-3 rounded-3xl ${isInstructor ? "bg-indigo-600 text-white" : "bg-white text-slate-700 shadow-sm"
+                    }`}
                 >
-                  <p className="text-sm leading-relaxed">{msg.content}</p>
+                  <p className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: msg.content }} />
                   <p className={`text-xs mt-2 ${isInstructor ? "text-indigo-200" : "text-slate-400"}`}>
                     {formatTime(msg.timestamp)}
                   </p>
@@ -62,11 +69,10 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
                 {!isInstructor && (
                   <button
                     onClick={() => setViewingOriginal(viewingOriginal === msg.id ? null : msg.id)}
-                    className={`absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                      viewingOriginal === msg.id
+                    className={`absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${viewingOriginal === msg.id
                         ? "bg-indigo-100 text-indigo-600"
                         : "bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100"
-                    } hover:bg-indigo-100 hover:text-indigo-600`}
+                      } hover:bg-indigo-100 hover:text-indigo-600`}
                     title="View original email"
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -90,30 +96,54 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
       {/* Input */}
       <div className="bg-white border-t border-slate-200 px-8 py-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <button
-            className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-colors"
+            className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-colors flex-shrink-0"
             title="Attach file (PDF, MP3, etc.)"
           >
             <Paperclip className="w-5 h-5" />
           </button>
-          <input
-            type="text"
-            placeholder="Write a reply..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 px-5 py-3 rounded-2xl bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all"
-          />
+          <div className="flex-1 relative">
+            <textarea
+              placeholder="Write a reply... (Shift+Enter for new line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              className="w-full px-5 py-3 rounded-2xl bg-slate-100 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition-all resize-none min-h-[48px] max-h-[120px]"
+              style={{
+                height: 'auto',
+                overflow: message.split('\n').length > 3 ? 'auto' : 'hidden'
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement
+                target.style.height = 'auto'
+                target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+              }}
+            />
+          </div>
           <button
-            onClick={handleSend}
+            onClick={handleOpenCompose}
             disabled={!message.trim()}
-            className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            title="Compose email"
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
+        <p className="text-xs text-slate-400 mt-2 ml-14">
+          Press <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Enter</kbd> to open compose • <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Shift+Enter</kbd> for new line
+        </p>
       </div>
+
+      {/* Compose Modal */}
+      <ComposeEmailModal
+        isOpen={isComposeOpen}
+        onClose={() => setIsComposeOpen(false)}
+        onSend={handleSend}
+        student={student}
+        initialContent={message}
+      />
     </div>
   )
 }
