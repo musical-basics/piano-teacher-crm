@@ -2,11 +2,12 @@
 
 import type React from "react"
 
-import { Send, Paperclip, Eye } from "lucide-react"
+import { Send, Paperclip, Eye, Sprout } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
 import { ComposeEmailModal } from "./compose-email-modal"
+import { SeedMessageModal } from "./seed-message-modal"
 
 interface ConversationPaneProps {
   student: Student
@@ -17,6 +18,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const [message, setMessage] = useState("")
   const [viewingOriginal, setViewingOriginal] = useState<string | null>(null)
   const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [isSeedOpen, setIsSeedOpen] = useState(false)
 
   const handleOpenCompose = () => {
     if (message.trim()) {
@@ -98,6 +100,14 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
       <div className="bg-white border-t border-slate-200 px-8 py-5">
         <div className="flex items-start gap-3">
           <button
+            onClick={() => setIsSeedOpen(true)}
+            className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors flex-shrink-0 border border-emerald-100"
+            title="Input Seed Message (Paste original inquiry)"
+          >
+            <Sprout className="w-5 h-5" />
+          </button>
+
+          <button
             className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-colors flex-shrink-0"
             title="Attach file (PDF, MP3, etc.)"
           >
@@ -141,6 +151,15 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         student={student}
+      />
+
+      <SeedMessageModal
+        isOpen={isSeedOpen}
+        onClose={() => setIsSeedOpen(false)}
+        studentId={student.id}
+        onSuccess={() => {
+          window.location.reload()
+        }}
       />
     </div>
   )

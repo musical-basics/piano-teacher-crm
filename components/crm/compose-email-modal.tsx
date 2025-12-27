@@ -45,32 +45,39 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
 
         const loadDraft = async () => {
             setIsLoadingDraft(true)
-            const { data } = await supabase
-                .from('drafts')
-                .select('*')
-                .eq('student_id', student.id)
-                .order('updated_at', { ascending: false })
-                .limit(1)
+            try {
+                const { data, error } = await supabase
+                    .from('drafts')
+                    .select('*')
+                    .eq('student_id', student.id)
+                    .order('updated_at', { ascending: false })
+                    .limit(1)
 
-            const draft = data && data.length > 0 ? data[0] : null
+                if (error) throw error
 
-            if (draft) {
-                setDraftId(draft.id)
-                setSubject(draft.subject || "Re: Lesson Follow-up")
-                setContent(draft.content || "")
-                if (editorRef.current) {
-                    editorRef.current.innerHTML = draft.content || ""
+                const draft = data && data.length > 0 ? data[0] : null
+
+                if (draft) {
+                    setDraftId(draft.id)
+                    setSubject(draft.subject || "Re: Lesson Follow-up")
+                    setContent(draft.content || "")
+                    if (editorRef.current) {
+                        editorRef.current.innerHTML = draft.content || ""
+                    }
+                    setLastSaved(new Date(draft.updated_at))
+                } else {
+                    setDraftId(null)
+                    setSubject("Re: Lesson Follow-up")
+                    setContent("")
+                    setAttachments([])
+                    if (editorRef.current) editorRef.current.innerHTML = ""
+                    setLastSaved(null)
                 }
-                setLastSaved(new Date(draft.updated_at))
-            } else {
-                setDraftId(null)
-                setSubject("Re: Lesson Follow-up")
-                setContent("")
-                setAttachments([])
-                if (editorRef.current) editorRef.current.innerHTML = ""
-                setLastSaved(null)
+            } catch (error) {
+                console.error("Failed to load draft:", error)
+            } finally {
+                setIsLoadingDraft(false)
             }
-            setIsLoadingDraft(false)
         }
 
         loadDraft()
