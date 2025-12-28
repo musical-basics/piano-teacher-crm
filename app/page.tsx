@@ -195,10 +195,13 @@ export default function CRMDashboard() {
 
 
 
-  const handleUpdateStudent = (updates: Partial<Student>) => {
+  const handleUpdateStudent = async (updates: Partial<Student>) => {
     if (!selectedStudent) return
 
-    // Update local state
+    // Keep old state for revert
+    const oldStudent = selectedStudent
+
+    // Update local state (Optimistic)
     const updatedStudent = { ...selectedStudent, ...updates }
     setStudents((prev) =>
       prev.map((s) => (s.id === selectedStudent.id ? updatedStudent : s))
@@ -206,7 +209,7 @@ export default function CRMDashboard() {
     setSelectedStudent(updatedStudent)
 
     // Update in Supabase
-    const updateDatabase = async () => {
+    try {
       const { error } = await supabase
         .from("students")
         .update({
@@ -218,10 +221,18 @@ export default function CRMDashboard() {
         .eq("id", selectedStudent.id)
 
       if (error) {
-        console.error("Error updating student:", error)
+        throw error
       }
+    } catch (error: any) {
+      console.error("Error updating student:", error)
+      alert(`Failed to save changes: ${error.message || error.details || "Unknown error"}`)
+
+      // Revert state
+      setStudents((prev) =>
+        prev.map((s) => (s.id === oldStudent.id ? oldStudent : s))
+      )
+      setSelectedStudent(oldStudent)
     }
-    updateDatabase()
   }
 
   if (isLoading) {
