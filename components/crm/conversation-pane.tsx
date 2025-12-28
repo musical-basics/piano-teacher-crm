@@ -1,9 +1,7 @@
 "use client"
-
 import type React from "react"
-
 import { supabase } from "@/lib/supabaseClient"
-import { Send, Paperclip, Eye, Sprout, Maximize2 } from "lucide-react"
+import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2 } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
@@ -21,41 +19,59 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [isSeedOpen, setIsSeedOpen] = useState(false)
 
+  // New state to show loading during send
+  const [isSending, setIsSending] = useState(false)
+
   const handleOpenCompose = () => {
     if (message.trim()) {
       setIsComposeOpen(true)
     }
   }
 
+  // --- THE FIX: Call the API Route ---
   const handleSendEmail = async (content: string, subject: string, attachments: any[]) => {
     if (!content.trim()) return
 
+    setIsSending(true)
+
     try {
-      // 1. Insert into DB
-      const { error } = await supabase.from('messages').insert({
-        student_id: student.id,
-        sender_role: 'instructor',
-        body_text: content,
-        created_at: new Date().toISOString()
+      // 1. Call the Gmail API Route (This sends the real email)
+      const response = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: student.email,
+          subject: subject || "Re: Piano Lessons", // Fallback subject
+          htmlContent: content,
+          studentId: student.id // Use this ID to save to DB automatically
+        })
       })
 
-      if (error) throw error
+      const data = await response.json()
 
-      // 2. Optimistic Update (via parent prop)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send email')
+      }
+
+      // 2. Success! Update UI
+      // (The API route already saved it to Supabase, but we update locally to see it instantly)
       onSendMessage(content, subject)
 
-      // 3. Force reload to ensure everything is in sync (optional but safe)
-      // window.location.reload() 
-    } catch (err) {
+      // Clear inputs
+      setMessage("")
+
+    } catch (err: any) {
       console.error("Failed to send message:", err)
-      alert("Failed to send message")
+      alert(`Error sending email: ${err.message}`)
+    } finally {
+      setIsSending(false)
     }
   }
 
   const handleQuickSend = async () => {
     if (!message.trim()) return
-    await handleSendEmail(message, "Quick Reply", [])
-    setMessage("")
+    // Default subject for quick chats
+    await handleSendEmail(message, `Re: Piano Lessons - ${student.name}`, [])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -64,7 +80,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
       e.preventDefault()
       handleQuickSend()
     }
-    // Shift+Enter allows new line (default textarea behavior)
+    // Shift+Enter allows new line
   }
 
   return (
@@ -82,7 +98,6 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
         {student.messages.map((msg) => {
           const isInstructor = msg.sender === "instructor"
-
           return (
             <div key={msg.id} className={`flex ${isInstructor ? "justify-end" : "justify-start"}`}>
               <div className="group relative max-w-[70%]">
@@ -168,15 +183,15 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           </button>
           <button
             onClick={handleQuickSend}
-            disabled={!message.trim()}
+            disabled={!message.trim() || isSending}
             className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             title="Send reply"
           >
-            <Send className="w-5 h-5" />
+            {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
         <p className="text-xs text-slate-400 mt-2 ml-14">
-          Press <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Enter</kbd> to open compose • <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Shift+Enter</kbd> for new line
+          Press <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Enter</kbd> to quick send • <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600 font-mono">Shift+Enter</kbd> for new line
         </p>
       </div>
 
@@ -185,7 +200,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         student={student}
-        onSend={handleSendEmail}
+        onSend={handleSendEmail} // Pass the API-connected function here
       />
 
       <SeedMessageModal
