@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         });
 
         const info = await transporter.sendMail({
-            from: `"Musical Basics" <${process.env.GMAIL_USER}>`,
+            from: `"Lionel from MusicalBasics" <${process.env.GMAIL_USER}>`,
             to: to,
             subject: subject,
             html: htmlContent,
