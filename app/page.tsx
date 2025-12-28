@@ -139,21 +139,23 @@ export default function CRMDashboard() {
 
       setStudents(formattedStudents)
 
-      // If we have a selected student, update them too
-      if (selectedStudent) {
-        const updatedSelected = formattedStudents.find(s => s.id === selectedStudent.id)
-        if (updatedSelected) setSelectedStudent(updatedSelected)
-      } else if (formattedStudents.length > 0) {
-        // If no student was selected, but we have students, select the first one
-        setSelectedStudent(formattedStudents[0]);
-      }
+      // Update selected student using functional update to avoid dependency loop
+      setSelectedStudent(prev => {
+        if (prev) {
+          const updated = formattedStudents.find(s => s.id === prev.id)
+          return updated || prev
+        } else if (formattedStudents.length > 0) {
+          return formattedStudents[0]
+        }
+        return null
+      })
 
     } catch (error) {
       console.error("Error loading data:", error)
     } finally {
       setIsLoading(false)
     }
-  }, [selectedStudent])
+  }, [])
 
   useEffect(() => {
     loadData()
