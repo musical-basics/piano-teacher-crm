@@ -19,9 +19,10 @@ interface ComposeEmailModalProps {
     isOpen: boolean
     onClose: () => void
     student: Student
+    onSend?: (content: string, subject: string, attachments: Attachment[]) => Promise<void>
 }
 
-export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModalProps) {
+export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeEmailModalProps) {
     // --- STATE ---
     const [subject, setSubject] = useState("Re: Lesson Follow-up")
     const [content, setContent] = useState("")
@@ -32,6 +33,7 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
     const [isMinimized, setIsMinimized] = useState(false)
     const [isMaximized, setIsMaximized] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [isSending, setIsSending] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [isLoadingDraft, setIsLoadingDraft] = useState(false)
     const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -158,10 +160,28 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
         onClose()
     }
 
+    const handleSendAction = async () => {
+        if (!onSend) return
+
+        setIsSending(true)
+        try {
+            await onSend(content, subject, attachments)
+            // If successful, delete the draft
+            if (draftId) {
+                await supabase.from('drafts').delete().eq('id', draftId)
+            }
+            onClose()
+        } catch (error) {
+            console.error("Failed to send:", error)
+        } finally {
+            setIsSending(false)
+        }
+    }
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault()
-            // handleSend() - would go here when send is wired
+            handleSendAction()
         }
     }
 
@@ -310,11 +330,15 @@ export function ComposeEmailModal({ isOpen, onClose, student }: ComposeEmailModa
                     <div className="flex items-center gap-1">
                         {/* Send button */}
                         <button
-                            disabled={!content.trim()}
+                            onClick={handleSendAction}
+                            disabled={!content.trim() || isSending}
                             className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            Send
-                            <Send className="w-4 h-4" />
+                            {isSending ? (
+                                <>Sending... <Loader2 className="w-4 h-4 animate-spin" /></>
+                            ) : (
+                                <>Send <Send className="w-4 h-4" /></>
+                            )}
                         </button>
 
                         {/* Formatting tools */}

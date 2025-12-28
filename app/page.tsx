@@ -80,71 +80,84 @@ export default function CRMDashboard() {
   }, [])
 
   // Fetch students and messages from Supabase
-  useEffect(() => {
-    const fetchStudents = async () => {
-      setIsLoading(true)
-      try {
-        // Fetch all students
-        const { data: studentsData, error: studentsError } = await supabase
-          .from("students")
-          .select("*")
-          .order("last_contacted_at", { ascending: false, nullsFirst: false })
+  const loadData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Fetch all students
+      const { data: studentsData, error: studentsError } = await supabase
+        .from("students")
+        .select("*")
+        .order("last_contacted_at", { ascending: false, nullsFirst: false })
 
-        if (studentsError) {
-          console.error("Error fetching students:", studentsError)
-          return
-        }
-
-        // Fetch all messages
-        const { data: messagesData, error: messagesError } = await supabase
-          .from("messages")
-          .select("*")
-          .order("created_at", { ascending: true })
-
-        if (messagesError) {
-          console.error("Error fetching messages:", messagesError)
-        }
-
-        // Map database records to Student type
-        const mappedStudents: Student[] = (studentsData || []).map((dbStudent) => {
-          const studentMessages: Message[] = (messagesData || [])
-            .filter((msg) => msg.student_id === dbStudent.id)
-            .map((msg) => ({
-              id: msg.id,
-              content: msg.body_text,
-              sender: msg.sender_role as "student" | "instructor",
-              timestamp: new Date(msg.created_at),
-            }))
-
-          const lastMessage = studentMessages[studentMessages.length - 1]
-
-          return {
-            id: dbStudent.id,
-            name: dbStudent.full_name,
-            email: dbStudent.email,
-            country: dbStudent.country_code || "US",
-            countryFlag: getCountryFlag(dbStudent.country_code),
-            status: dbStudent.status === "new" ? "unread" : "read",
-            tags: dbStudent.tags || [],
-            messages: studentMessages,
-            lastMessageDate: lastMessage ? lastMessage.timestamp : new Date(dbStudent.created_at),
-            instructorNotes: dbStudent.instructor_strategy || undefined,
-          }
-        })
-
-        setStudents(mappedStudents)
-        if (mappedStudents.length > 0) {
-          setSelectedStudent(mappedStudents[0])
-        }
-      } catch (error) {
-        console.error("Error loading data:", error)
-      } finally {
-        setIsLoading(false)
+      if (studentsError) {
+        console.error("Error fetching students:", studentsError)
+        return
       }
-    }
 
-    fetchStudents()
-  }, [])
+      // Fetch all messages
+      const { data: messagesData, error: messagesError } = await supabase
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: true })
+
+      if (messagesError) {
+        console.error("Error fetching messages:", messagesError)
+      }
+
+      // Combine data
+      const formattedStudents: Student[] = (studentsData || []).map((dbStudent) => {
+        const studentMessages = (messagesData || [])
+          .filter((m) => m.student_id === dbStudent.id)
+          .map((m) => ({
+            id: m.id,
+            content: m.body_text || "",
+            sender: m.sender_role as "student" | "instructor" || "student",
+            timestamp: new Date(m.created_at),
+          }))
+
+        // Determine status
+        let status: "read" | "unread" | "replied" = "read"
+        if (dbStudent.status === 'active') status = 'read' // Default mapping
+        if (dbStudent.status === 'new') status = 'unread'
+
+        return {
+          id: dbStudent.id,
+          name: dbStudent.full_name,
+          email: dbStudent.email,
+          avatar: "/placeholder.svg?height=40&width=40", // Fallback
+          status: status,
+          lastMessage: studentMessages.length > 0 ? studentMessages[studentMessages.length - 1].content : "No messages",
+          time: dbStudent.last_contacted_at ? new Date(dbStudent.last_contacted_at).toLocaleDateString() : "",
+          messages: studentMessages,
+          lastMessageDate: dbStudent.last_contacted_at ? new Date(dbStudent.last_contacted_at) : new Date(0),
+          country: dbStudent.country_code || "US",
+          countryFlag: getCountryFlag(dbStudent.country_code),
+          tags: dbStudent.tags || [],
+          instructorNotes: dbStudent.instructor_strategy
+        }
+      })
+
+      setStudents(formattedStudents)
+
+      // If we have a selected student, update them too
+      if (selectedStudent) {
+        const updatedSelected = formattedStudents.find(s => s.id === selectedStudent.id)
+        if (updatedSelected) setSelectedStudent(updatedSelected)
+      } else if (formattedStudents.length > 0) {
+        // If no student was selected, but we have students, select the first one
+        setSelectedStudent(formattedStudents[0]);
+      }
+
+    } catch (error) {
+      console.error("Error loading data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedStudent])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData]) // Initial load
 
   const filteredStudents = students.filter((student) => student.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -178,27 +191,7 @@ export default function CRMDashboard() {
     })
   }
 
-  const handleAddStudent = (newStudent: Omit<Student, "id" | "messages" | "lastMessageDate" | "status">) => {
-    const student: Student = {
-      ...newStudent,
-      id: `student-${Date.now()}`,
-      status: "unread",
-      messages:
-        newStudent.tags.length > 0
-          ? [
-            {
-              id: `msg-${Date.now()}`,
-              content: newStudent.tags[0],
-              sender: "student",
-              timestamp: new Date(),
-            },
-          ]
-          : [],
-      lastMessageDate: new Date(),
-    }
-    setStudents((prev) => [student, ...prev])
-    setIsModalOpen(false)
-  }
+
 
   const handleUpdateStudent = (updates: Partial<Student>) => {
     if (!selectedStudent) return
@@ -293,7 +286,7 @@ export default function CRMDashboard() {
         )}
       </div>
 
-      <AddStudentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleAddStudent} />
+      <AddStudentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={loadData} />
 
       {selectedStudent && (
         <EditStudentModal

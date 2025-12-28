@@ -2,6 +2,7 @@
 
 import type React from "react"
 
+import { supabase } from "@/lib/supabaseClient"
 import { Send, Paperclip, Eye, Sprout } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
@@ -26,16 +27,42 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
     }
   }
 
-  const handleSend = (content: string, subject: string) => {
-    onSendMessage(content, subject)
+  const handleSendEmail = async (content: string, subject: string, attachments: any[]) => {
+    if (!content.trim()) return
+
+    try {
+      // 1. Insert into DB
+      const { error } = await supabase.from('messages').insert({
+        student_id: student.id,
+        sender_role: 'instructor',
+        body_text: content,
+        created_at: new Date().toISOString()
+      })
+
+      if (error) throw error
+
+      // 2. Optimistic Update (via parent prop)
+      onSendMessage(content, subject)
+
+      // 3. Force reload to ensure everything is in sync (optional but safe)
+      // window.location.reload() 
+    } catch (err) {
+      console.error("Failed to send message:", err)
+      alert("Failed to send message")
+    }
+  }
+
+  const handleQuickSend = async () => {
+    if (!message.trim()) return
+    await handleSendEmail(message, "Quick Reply", [])
     setMessage("")
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter without Shift opens compose modal
+    // Enter without Shift sends message (Quick Send)
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleOpenCompose()
+      handleQuickSend()
     }
     // Shift+Enter allows new line (default textarea behavior)
   }
@@ -133,10 +160,10 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
             />
           </div>
           <button
-            onClick={handleOpenCompose}
+            onClick={() => handleSendEmail(message, "Quick Reply", [])}
             disabled={!message.trim()}
             className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-            title="Compose email"
+            title="Send reply"
           >
             <Send className="w-5 h-5" />
           </button>
@@ -151,6 +178,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         student={student}
+        onSend={handleSendEmail}
       />
 
       <SeedMessageModal

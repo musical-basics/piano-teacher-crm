@@ -1,137 +1,146 @@
 "use client"
-
-import type React from "react"
-
-import { X } from "lucide-react"
 import { useState } from "react"
-import type { Student } from "@/lib/types"
-
-const countryOptions = [
-  { code: "US", flag: "🇺🇸", name: "United States" },
-  { code: "NL", flag: "🇳🇱", name: "Netherlands" },
-  { code: "AE", flag: "🇦🇪", name: "United Arab Emirates" },
-  { code: "UK", flag: "🇬🇧", name: "United Kingdom" },
-  { code: "CA", flag: "🇨🇦", name: "Canada" },
-  { code: "AU", flag: "🇦🇺", name: "Australia" },
-  { code: "DE", flag: "🇩🇪", name: "Germany" },
-  { code: "FR", flag: "🇫🇷", name: "France" },
-  { code: "IN", flag: "🇮🇳", name: "India" },
-  { code: "JP", flag: "🇯🇵", name: "Japan" },
-]
+import { X, UserPlus, Loader2, AlertCircle } from "lucide-react"
+import { supabase } from "@/lib/supabaseClient"
 
 interface AddStudentModalProps {
   isOpen: boolean
   onClose: () => void
-  onAdd: (student: Omit<Student, "id" | "messages" | "lastMessageDate" | "status">) => void
+  onAdd: () => void // Triggers the list refresh
 }
 
 export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
-  const [country, setCountry] = useState(countryOptions[0])
-  const [notes, setNotes] = useState("")
+  const [country, setCountry] = useState("")
+  const [initialNote, setInitialNote] = useState("")
 
-  if (!isOpen) return null
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (name && email) {
-      onAdd({
-        name,
-        email,
-        country: country.code,
-        countryFlag: country.flag,
-        tags: notes ? [notes] : [],
-      })
+    if (!name.trim() || !email.trim()) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // 1. Insert Student
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          full_name: name,
+          email: email,
+          country_code: country || 'US',
+          status: 'active',
+          last_contacted_at: new Date().toISOString() // Mark as active now
+        })
+        .select()
+        .single()
+
+      if (studentError) {
+        if (studentError.code === '23505') throw new Error("This email is already registered.")
+        throw studentError
+      }
+
+      // 2. Insert Initial Note (as a message from the student)
+      if (initialNote.trim()) {
+        const { error: msgError } = await supabase
+          .from('messages')
+          .insert({
+            student_id: student.id,
+            sender_role: 'student', // It's their inquiry
+            body_text: initialNote,
+            created_at: new Date().toISOString()
+          })
+
+        if (msgError) throw msgError
+      }
+
+      // 3. Success
+      onAdd() // Refresh the main list
+      onClose()
       // Reset form
-      setName("")
-      setEmail("")
-      setCountry(countryOptions[0])
-      setNotes("")
+      setName(""); setEmail(""); setCountry(""); setInitialNote("")
+
+    } catch (err: any) {
+      console.error("Save failed:", err)
+      setError(err.message || "Failed to save student")
+    } finally {
+      setIsLoading(false)
     }
   }
 
+  if (!isOpen) return null
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-xl w-[500px] border border-slate-100 p-6">
 
-      {/* Modal */}
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 p-8">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-serif text-slate-800 flex items-center gap-2">
+            <UserPlus size={24} className="text-indigo-600" />
+            Add New Student
+          </h2>
+          <button onClick={onClose}><X className="text-slate-400 hover:text-slate-600" /></button>
+        </div>
 
-        <h2 className="text-2xl font-serif text-slate-800 mb-6">Add New Student</h2>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+            <AlertCircle size={16} /> {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Name */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Name</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Name</label>
             <input
-              type="text"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              placeholder="e.g. Evan Quigley"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter student name"
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition-all"
-              required
+              onChange={e => setName(e.target.value)}
             />
           </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter email address"
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition-all"
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+              <input
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                placeholder="evan@gmail.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Country</label>
+              <input
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                placeholder="US"
+                value={country}
+                onChange={e => setCountry(e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* Country */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Country</label>
-            <select
-              value={country.code}
-              onChange={(e) => {
-                const selected = countryOptions.find((c) => c.code === e.target.value)
-                if (selected) setCountry(selected)
-              }}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition-all appearance-none bg-white"
-            >
-              {countryOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.flag} {option.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Initial Notes</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Initial Notes / Inquiry</label>
             <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any initial notes about this student..."
-              rows={3}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-transparent transition-all resize-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              rows={4}
+              placeholder="Paste their first email here..."
+              value={initialNote}
+              onChange={e => setInitialNote(e.target.value)}
             />
           </div>
 
-          {/* Submit */}
           <button
             type="submit"
-            className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors"
+            disabled={isLoading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-200 transition-all flex justify-center items-center gap-2"
           >
-            Start Conversation
+            {isLoading ? <Loader2 className="animate-spin" /> : "Start Conversation"}
           </button>
         </form>
       </div>
