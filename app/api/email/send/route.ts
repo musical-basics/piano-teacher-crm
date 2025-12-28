@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     try {
         const { to, subject, htmlContent, studentId } = await req.json();
 
-        // 1. Setup OAuth2 Client using your new .env keys
         const oauth2Client = new OAuth2(
             process.env.GMAIL_CLIENT_ID,
             process.env.GMAIL_CLIENT_SECRET,
@@ -20,12 +19,13 @@ export async function POST(req: Request) {
             refresh_token: process.env.GMAIL_REFRESH_TOKEN
         });
 
-        // 2. Get Access Token (This is the "handshake" with Google)
         const accessToken = await oauth2Client.getAccessToken();
 
-        // 3. Create the Transporter
+        // UPDATED TRANSPORTER: Uses Port 587 to bypass ISP blocks
         const transporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false, // true for 465, false for other ports
             auth: {
                 type: 'OAuth2',
                 user: process.env.GMAIL_USER,
@@ -36,7 +36,6 @@ export async function POST(req: Request) {
             },
         });
 
-        // 4. Send the REAL Email
         const info = await transporter.sendMail({
             from: `"Musical Basics" <${process.env.GMAIL_USER}>`,
             to: to,
@@ -46,7 +45,6 @@ export async function POST(req: Request) {
 
         console.log("REAL Message sent ID:", info.messageId);
 
-        // 5. Save to Database
         if (studentId) {
             await supabase.from('messages').insert({
                 student_id: studentId,
