@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { supabase } from "@/lib/supabaseClient"
-import { Send, Paperclip, Eye, Sprout } from "lucide-react"
+import { Send, Paperclip, Eye, Sprout, Maximize2 } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
@@ -160,7 +160,14 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
             />
           </div>
           <button
-            onClick={() => handleSendEmail(message, "Quick Reply", [])}
+            onClick={() => setIsComposeOpen(true)}
+            className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-colors flex-shrink-0"
+            title="Open full composer"
+          >
+            <Maximize2 className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleQuickSend}
             disabled={!message.trim()}
             className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             title="Send reply"
