@@ -235,6 +235,38 @@ export default function CRMDashboard() {
     }
   }
 
+  const handleDeleteStudent = async (studentId: string) => {
+    if (!confirm("Are you sure you want to delete this student?")) return
+
+    // Optimistic update
+    const previousStudents = students
+    const studentToDelete = students.find((s) => s.id === studentId)
+
+    setStudents((prev) => prev.filter((s) => s.id !== studentId))
+    if (selectedStudent?.id === studentId) {
+      setSelectedStudent(null)
+    }
+
+    try {
+      const { error } = await supabase.from("students").delete().eq("id", studentId)
+
+      if (error) {
+        throw error
+      }
+    } catch (error: any) {
+      console.error("Error deleting student:", error)
+      alert(`Failed to delete student: ${error.message || "Unknown error"}`)
+      // Revert state
+      setStudents(previousStudents)
+      if (studentToDelete && selectedStudent === null) {
+        // If we deselected the student, we might want to re-select if we revert? 
+        // But `selectedStudent` was local state.
+        // Let's just reload to be safe and consistent.
+        loadData()
+      }
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -265,6 +297,7 @@ export default function CRMDashboard() {
           onSearchChange={setSearchQuery}
           onOpenDebug={() => setIsDebugOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onDeleteStudent={handleDeleteStudent}
         />
       </div>
 

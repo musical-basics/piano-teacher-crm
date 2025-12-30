@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Plus, FlaskConical, Settings } from "lucide-react"
+import { Search, Plus, FlaskConical, Settings, Trash2 } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { formatRelativeTime } from "@/lib/date-utils"
 
@@ -13,6 +13,7 @@ interface SidebarProps {
   onSearchChange: (query: string) => void
   onOpenDebug?: () => void
   onOpenSettings?: () => void
+  onDeleteStudent: (studentId: string) => void
 }
 
 export function Sidebar({
@@ -24,6 +25,7 @@ export function Sidebar({
   onSearchChange,
   onOpenDebug,
   onOpenSettings,
+  onDeleteStudent,
 }: SidebarProps) {
   return (
     <div className="h-full border-r border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -59,33 +61,47 @@ export function Sidebar({
           const lastMessage = student.messages[student.messages.length - 1]
 
           return (
-            <button
+            <div
               key={student.id}
-              onClick={() => onSelectStudent(student)}
-              className={`w-full p-4 rounded-2xl text-left transition-all ${isSelected ? "bg-white shadow-sm ring-1 ring-slate-200" : "hover:bg-slate-50"
-                }`}
+              className="relative group"
             >
-              <div className="flex items-start gap-3">
-                {/* Unread indicator */}
-                <div className="mt-2">
-                  {student.status === "unread" ? (
-                    <div className="w-2.5 h-2.5 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.5)]" />
-                  ) : (
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-slate-800 truncate">{student.name}</span>
-                    <span className="text-xs text-slate-400 whitespace-nowrap">
-                      {formatRelativeTime(student.lastMessageDate)}
-                    </span>
+              <button
+                onClick={() => onSelectStudent(student)}
+                className={`w-full p-4 rounded-2xl text-left transition-all ${isSelected ? "bg-white shadow-sm ring-1 ring-slate-200" : "hover:bg-slate-50"
+                  }`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Unread indicator */}
+                  <div className="mt-2">
+                    {student.status === "unread" ? (
+                      <div className="w-2.5 h-2.5 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.5)]" />
+                    ) : (
+                      <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                    )}
                   </div>
-                  <p className="text-sm text-slate-500 truncate mt-1">{lastMessage?.content || "No messages yet"}</p>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-slate-800 truncate">{student.name}</span>
+                      <span className="text-xs text-slate-400 whitespace-nowrap">
+                        {formatRelativeTime(student.lastMessageDate)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 truncate mt-1">{lastMessage?.content || "No messages yet"}</p>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteStudent(student.id)
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Delete student"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           )
         })}
       </div>
