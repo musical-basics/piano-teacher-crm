@@ -140,6 +140,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      node-email-reply-parser:
+        specifier: ^0.1.4
+        version: 0.1.4
       nodemailer:
         specifier: ^7.0.12
         version: 7.0.12
@@ -1823,6 +1826,10 @@ packages:
     resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
     engines: {node: '>=6'}
 
+  esrever@0.2.0:
+    resolution: {integrity: sha512-1e9YJt6yQkyekt2BUjTky7LZWWVyC2cIpgdnsTAvMcnzXIZvlW/fTMPkxBcZoYhgih4d+EC+iw+yv9GIkz7vrw==}
+    hasBin: true
+
   eventemitter3@4.0.7:
     resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
 
@@ -2101,6 +2108,10 @@ packages:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
     engines: {node: '>=10.5.0'}
     deprecated: Use your platform's native DOMException instead
+
+  node-email-reply-parser@0.1.4:
+    resolution: {integrity: sha512-rXiLvb9J8RRNYEf/Ftf2vx+HEjZjB16ONY5Qd9PAFdN0OESkgvGINbtlgIvdIjVeZ1jPPoK/b90sx+lP1CIvqA==}
+    engines: {node: '>= 14.0.0'}
 
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
@@ -4378,6 +4389,8 @@ snapshots:
 
   escalade@3.2.0: {}
 
+  esrever@0.2.0: {}
+
   eventemitter3@4.0.7: {}
 
   extend@3.0.2: {}
@@ -4656,6 +4669,11 @@ snapshots:
       - babel-plugin-macros
 
   node-domexception@1.0.0: {}
+
+  node-email-reply-parser@0.1.4:
+    dependencies:
+      esrever: 0.2.0
+      lodash: 4.17.21
 
   node-fetch@3.3.2:
     dependencies:

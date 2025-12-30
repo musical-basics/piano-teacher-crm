@@ -1,70 +1,44 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { supabase } from '@/lib/supabaseClient';
+// @ts-ignore (This library doesn't have perfect typescript types, so we ignore the warning)
+import EmailReplyParser from 'node-email-reply-parser';
 
 const OAuth2 = google.auth.OAuth2;
 
-// --- 1. NEW: "Nuclear" Cleaner Function ---
-function cleanReplyBody(text: string): string {
-    const lines = text.split('\n');
-    let cleanLines: string[] = [];
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-
-        // STOP if we hit the Gmail "On [Date] ... wrote:" line
-        // We check if it starts with "On" and contains "wrote:" anywhere in the line
-        if (trimmed.startsWith("On ") && trimmed.includes("wrote:")) {
-            break;
-        }
-
-        // STOP if we hit the Outlook/Standard "From:" block
-        if (trimmed.startsWith("From: ") && trimmed.includes("@")) {
-            break;
-        }
-
-        // STOP if we hit a Divider line
-        if (trimmed.match(/^_+$/)) { // matches "_______"
-            break;
-        }
-
-        // STOP if we hit a quoted block (lines starting with >)
-        // (This catches cases where the "On... wrote" header was missing but the quote remains)
-        if (trimmed.startsWith(">")) {
-            break;
-        }
-
-        // If none of the above, keep the line
-        cleanLines.push(line);
-    }
-
-    // Join it back together and trim extra whitespace
-    return cleanLines.join('\n').trim();
-}
-
-// --- 2. EXISTING: Helper to Dig for Text ---
+// --- Helper to Dig for Text (Simplified) ---
 function extractBody(payload: any): string {
     if (!payload) return "";
     let text = "";
 
-    if (payload.body && payload.body.data) {
-        text = Buffer.from(payload.body.data, 'base64').toString('utf-8');
-    } else if (payload.parts) {
-        for (const part of payload.parts) {
-            if (part.mimeType === 'text/plain') {
-                if (part.body && part.body.data) {
-                    text = Buffer.from(part.body.data, 'base64').toString('utf-8');
-                    break;
-                }
-            }
-            if (part.mimeType?.startsWith('multipart/')) {
-                text = extractBody(part);
-                if (text) break;
-            }
+    // 1. Try to find the Plain Text version first (Easiest to clean)
+    if (payload.parts) {
+        const textPart = payload.parts.find((p: any) => p.mimeType === 'text/plain');
+        if (textPart && textPart.body && textPart.body.data) {
+            text = Buffer.from(textPart.body.data, 'base64').toString('utf-8');
         }
     }
-    // Clean the result before returning
-    return cleanReplyBody(text);
+
+    // 2. Fallback: If no parts, check the main body
+    if (!text && payload.body && payload.body.data) {
+        text = Buffer.from(payload.body.data, 'base64').toString('utf-8');
+    }
+
+    // 3. If we still have nothing, try to find HTML and strip tags (Last resort)
+    if (!text && payload.parts) {
+        const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
+        if (htmlPart && htmlPart.body && htmlPart.body.data) {
+            const html = Buffer.from(htmlPart.body.data, 'base64').toString('utf-8');
+            // rudimentary html-to-text just to have something
+            text = html.replace(/<[^>]*>/g, ' ').trim();
+        }
+    }
+
+    // --- THE MAGIC: Use the library to clean the reply ---
+    // The "true" argument tells it to aggressively strip quoted text
+    const cleanText = new EmailReplyParser().read(text).getVisibleText();
+
+    return cleanText || text; // Fallback to original if cleaner empties it
 }
 
 export async function POST(req: Request) {
@@ -83,11 +57,11 @@ export async function POST(req: Request) {
 
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-        // --- 3. FIX: Add 'newer_than:30d' to ignore old emails ---
+        // Get emails from the last 30 days
         const response = await gmail.users.messages.list({
             userId: 'me',
             q: `from:${studentEmail} newer_than:30d`,
-            maxResults: 10
+            maxResults: 5
         });
 
         const messages = response.data.messages || [];
@@ -118,7 +92,7 @@ export async function POST(req: Request) {
             await supabase.from('messages').insert({
                 student_id: studentId,
                 sender_role: 'student',
-                body_text: body || "(Could not parse email body)",
+                body_text: body,
                 gmail_message_id: msg.id,
                 created_at: createdAt
             });
