@@ -35,10 +35,11 @@ function extractBody(payload: any): string {
     }
 
     // --- THE MAGIC: Use the library to clean the reply ---
-    // The "true" argument tells it to aggressively strip quoted text
-    const cleanText = new EmailReplyParser().read(text).getVisibleText();
+    // The library exports a function: parse(text, visibleTextOnly)
+    // We pass true to get just the visible text immediately
+    const cleanText = EmailReplyParser(text, true);
 
-    return cleanText || text; // Fallback to original if cleaner empties it
+    return ((cleanText as string) || text); // Fallback to original if cleaner empties it
 }
 
 export async function POST(req: Request) {
