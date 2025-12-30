@@ -145,9 +145,8 @@ export default function CRMDashboard() {
         if (prev) {
           const updated = formattedStudents.find(s => s.id === prev.id)
           return updated || prev
-        } else if (formattedStudents.length > 0) {
-          return formattedStudents[0]
         }
+        // OTHERWISE: Do NOT auto-select the first student. Return null to show Dashboard.
         return null
       })
 
@@ -293,6 +292,7 @@ export default function CRMDashboard() {
           selectedStudent={selectedStudent}
           onSelectStudent={handleSelectStudent}
           onAddStudent={() => setIsModalOpen(true)}
+          onGoToDashboard={() => setSelectedStudent(null)}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenDebug={() => setIsDebugOpen(true)}
