@@ -1,7 +1,16 @@
 export function formatRelativeTime(date: Date): string {
-  const now = new Date("2025-12-27") // Current date as specified
-  const diffInMs = now.getTime() - date.getTime()
+  // FIX: Use new Date() to get the actual current moment
+  const now = new Date()
+
+  // Reset hours to compare pure dates (optional, but cleaner for "Today/Yesterday" logic)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const compareDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+  const diffInMs = today.getTime() - compareDate.getTime()
   const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
+
+  // Handle future dates (if server time is slightly ahead)
+  if (diffInDays < 0) return "Today"
 
   if (diffInDays === 0) return "Today"
   if (diffInDays === 1) return "Yesterday"
