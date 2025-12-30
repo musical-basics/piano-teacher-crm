@@ -2,7 +2,7 @@
 import type React from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2, RefreshCw } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
 import { ComposeEmailModal } from "./compose-email-modal"
@@ -24,6 +24,11 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const [isSyncing, setIsSyncing] = useState(false)
 
   const [status, setStatus] = useState(student.status || 'Lead')
+
+  // --- FIX: Reset status when student changes ---
+  useEffect(() => {
+    setStatus(student.status || 'Lead')
+  }, [student])
 
   // COLOR MAPPING
   const statusColors: Record<string, string> = {
