@@ -6,6 +6,7 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { Sidebar } from "@/components/crm/sidebar"
 import { ConversationPane } from "@/components/crm/conversation-pane"
 import { CopilotPane } from "@/components/crm/copilot-pane"
+import { DashboardPane } from "@/components/crm/dashboard-pane"
 import { AddStudentModal } from "@/components/crm/add-student-modal"
 import { EditStudentModal } from "@/components/crm/edit-student-modal"
 import { SettingsModal } from "@/components/crm/settings-modal"
@@ -309,9 +310,10 @@ export default function CRMDashboard() {
         {selectedStudent ? (
           <ConversationPane student={selectedStudent} onSendMessage={handleSendMessage} />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-500">
-            Select a student to view conversation
-          </div>
+          <DashboardPane
+            students={students}
+            onSelectStudent={handleSelectStudent}
+          />
         )}
       </div>
 
