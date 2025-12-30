@@ -5,13 +5,23 @@ import { supabase } from '@/lib/supabaseClient';
 const OAuth2 = google.auth.OAuth2;
 
 // --- 1. NEW: Helper to remove "On [Date] wrote..." ---
+// --- 1. NEW: Helper to remove "On [Date] wrote..." ---
 function cleanReplyBody(text: string): string {
-    // Common patterns for where the "Reply" history starts
     const separators = [
-        /On\s+\w{3},\s+\w{3}\s+\d{1,2},.*wrote:/i, // "On Tue, Dec 30... wrote:"
-        /-----Original Message-----/i,             // Standard separators
-        /From:\s.*Sent:\s/i,                       // Outlook style
-        /________________________________/         // Dividers
+        // 1. Robust Gmail/Outlook header (Handles newlines & variable date formats)
+        // Matches: "On Tue, Dec 30... wrote:" or "On 2025-12-30... wrote:"
+        /On\s+\w{3},?\s+\w{3}\s+\d{1,2},?[\s\S]*?wrote:/i,
+
+        // 2. Simple "On [Date] wrote:" (Fallbacks)
+        /On\s+.*?wrote:/i,
+
+        // 3. Standard separators
+        /-----Original Message-----/i,
+        /From:\s.*Sent:\s/i,
+        /________________________________/,
+
+        // 4. Quote blocks (Lines starting with >)
+        /\n>/
     ];
 
     let cleanText = text;
