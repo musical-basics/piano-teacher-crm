@@ -1,7 +1,7 @@
 "use client"
 import type React from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2 } from "lucide-react"
+import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2, RefreshCw } from "lucide-react"
 import { useState } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
@@ -21,6 +21,35 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
   // New state to show loading during send
   const [isSending, setIsSending] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const handleSyncEmails = async () => {
+    setIsSyncing(true)
+    try {
+      const res = await fetch('/api/email/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.id,
+          studentEmail: student.email
+        })
+      })
+
+      const data = await res.json()
+
+      if (data.count > 0) {
+        // If we found new emails, reload the page to show them
+        window.location.reload()
+      } else {
+        // Optional: Show a tiny toast saying "Up to date"
+        console.log("No new emails found")
+      }
+    } catch (err) {
+      console.error("Sync failed", err)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const handleOpenCompose = () => {
     if (message.trim()) {
@@ -36,7 +65,12 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
     try {
       // 1. Call the Gmail API Route (This sends the real email)
-      const response = await fetch('/api/email/send', {
+      // Add a 15-second timeout
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out')), 15000)
+      );
+
+      const fetchPromise = fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -45,7 +79,9 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           htmlContent: content,
           studentId: student.id // Use this ID to save to DB automatically
         })
-      })
+      });
+
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
       const data = await response.json()
 
@@ -86,12 +122,24 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   return (
     <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-serif text-slate-800">{student.name}</h2>
-          <span className="text-xl">{student.countryFlag}</span>
+      <div className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-serif text-slate-800">{student.name}</h2>
+            <span className="text-xl">{student.countryFlag}</span>
+          </div>
+          <p className="text-sm text-slate-500 mt-1">{student.email}</p>
         </div>
-        <p className="text-sm text-slate-500 mt-1">{student.email}</p>
+
+        {/* SYNC BUTTON */}
+        <button
+          onClick={handleSyncEmails}
+          disabled={isSyncing}
+          className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-medium transition-colors border border-slate-200"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-indigo-500" : ""}`} />
+          {isSyncing ? "Checking..." : "Check for Replies"}
+        </button>
       </div>
 
       {/* Messages */}

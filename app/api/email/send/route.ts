@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabaseClient';
 const OAuth2 = google.auth.OAuth2;
 
 export async function POST(req: Request) {
+    console.log("Email send route hit");
     try {
         const { to, subject, htmlContent, studentId } = await req.json();
+        console.log("Received payload:", { to, subject, studentId });
 
         const oauth2Client = new OAuth2(
             process.env.GMAIL_CLIENT_ID,
@@ -19,13 +21,15 @@ export async function POST(req: Request) {
             refresh_token: process.env.GMAIL_REFRESH_TOKEN
         });
 
+        console.log("Getting access token...");
         const accessToken = await oauth2Client.getAccessToken();
+        console.log("Got access token");
 
-        // UPDATED TRANSPORTER: Uses Port 587 to bypass ISP blocks
+        // UPDATED TRANSPORTER: Trying Port 465 (SSL) since 587 timed out
         const transporter = nodemailer.createTransport({
             host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, // true for 465, false for other ports
+            port: 465,
+            secure: true, // true for 465, false for other ports
             auth: {
                 type: 'OAuth2',
                 user: process.env.GMAIL_USER,
@@ -36,23 +40,28 @@ export async function POST(req: Request) {
             },
         });
 
+        console.log("Sending mail via transporter...");
         const info = await transporter.sendMail({
             from: `"Lionel from MusicalBasics" <${process.env.GMAIL_USER}>`,
             to: to,
             subject: subject,
             html: htmlContent,
         });
+        console.log("Mail sent, info:", info);
 
         console.log("REAL Message sent ID:", info.messageId);
 
         if (studentId) {
-            await supabase.from('messages').insert({
+            console.log("Inserting into database...");
+            const { error } = await supabase.from('messages').insert({
                 student_id: studentId,
                 sender_role: 'instructor',
                 body_text: htmlContent,
                 gmail_message_id: info.messageId,
                 created_at: new Date().toISOString()
             });
+            if (error) console.error("Database insert error:", error);
+            else console.log("Database insert success");
         }
 
         return NextResponse.json({ success: true, messageId: info.messageId });
