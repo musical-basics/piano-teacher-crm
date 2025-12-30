@@ -4,38 +4,42 @@ import { supabase } from '@/lib/supabaseClient';
 
 const OAuth2 = google.auth.OAuth2;
 
-// --- 1. NEW: Helper to remove "On [Date] wrote..." ---
-// --- 1. NEW: Helper to remove "On [Date] wrote..." ---
+// --- 1. NEW: "Nuclear" Cleaner Function ---
 function cleanReplyBody(text: string): string {
-    const separators = [
-        // 1. Robust Gmail/Outlook header (Handles newlines & variable date formats)
-        // Matches: "On Tue, Dec 30... wrote:" or "On 2025-12-30... wrote:"
-        /On\s+\w{3},?\s+\w{3}\s+\d{1,2},?[\s\S]*?wrote:/i,
+    const lines = text.split('\n');
+    let cleanLines: string[] = [];
 
-        // 2. Simple "On [Date] wrote:" (Fallbacks)
-        /On\s+.*?wrote:/i,
+    for (const line of lines) {
+        const trimmed = line.trim();
 
-        // 3. Standard separators
-        /-----Original Message-----/i,
-        /From:\s.*Sent:\s/i,
-        /________________________________/,
-
-        // 4. Quote blocks (Lines starting with >)
-        /\n>/
-    ];
-
-    let cleanText = text;
-
-    for (const regex of separators) {
-        const match = text.match(regex);
-        if (match && match.index) {
-            // Cut off everything starting from the separator
-            cleanText = cleanText.substring(0, match.index);
-            break; // Stop after finding the first (top-most) separator
+        // STOP if we hit the Gmail "On [Date] ... wrote:" line
+        // We check if it starts with "On" and contains "wrote:" anywhere in the line
+        if (trimmed.startsWith("On ") && trimmed.includes("wrote:")) {
+            break;
         }
+
+        // STOP if we hit the Outlook/Standard "From:" block
+        if (trimmed.startsWith("From: ") && trimmed.includes("@")) {
+            break;
+        }
+
+        // STOP if we hit a Divider line
+        if (trimmed.match(/^_+$/)) { // matches "_______"
+            break;
+        }
+
+        // STOP if we hit a quoted block (lines starting with >)
+        // (This catches cases where the "On... wrote" header was missing but the quote remains)
+        if (trimmed.startsWith(">")) {
+            break;
+        }
+
+        // If none of the above, keep the line
+        cleanLines.push(line);
     }
 
-    return cleanText.trim();
+    // Join it back together and trim extra whitespace
+    return cleanLines.join('\n').trim();
 }
 
 // --- 2. EXISTING: Helper to Dig for Text ---
