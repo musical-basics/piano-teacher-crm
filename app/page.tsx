@@ -116,9 +116,9 @@ export default function CRMDashboard() {
           }))
 
         // Determine status
-        let status: "read" | "unread" | "replied" = "read"
-        if (dbStudent.status === 'active') status = 'read' // Default mapping
-        if (dbStudent.status === 'new') status = 'unread'
+        // WE UPDATED THIS: Use the actual DB status, defaulting to 'Lead' if missing
+        // Cast to 'any' temporarily if TS complains during migration
+        const status = (dbStudent.status as any) || 'Lead'
 
         return {
           id: dbStudent.id,
@@ -165,8 +165,7 @@ export default function CRMDashboard() {
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student)
-    // Mark as read when selected
-    setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, status: "read" as const } : s)))
+    // Removed auto-update to "read" because we now use CRM statuses (Lead, Active, etc.)
   }
 
   const handleSendMessage = (content: string) => {
