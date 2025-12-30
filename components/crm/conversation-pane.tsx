@@ -23,6 +23,32 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const [isSending, setIsSending] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
 
+  const [status, setStatus] = useState(student.status || 'Lead')
+
+  // COLOR MAPPING
+  const statusColors: Record<string, string> = {
+    Lead: "bg-slate-100 text-slate-600 border-slate-200",
+    Discussion: "bg-blue-50 text-blue-600 border-blue-200",
+    Trial: "bg-amber-50 text-amber-600 border-amber-200",
+    Active: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    Inactive: "bg-red-50 text-red-600 border-red-200",
+  }
+
+  const handleStatusChange = async (newStatus: any) => {
+    setStatus(newStatus) // Update UI instantly
+
+    // Update Database
+    const { error } = await supabase
+      .from('students')
+      .update({ status: newStatus })
+      .eq('id', student.id)
+
+    if (error) {
+      console.error("Failed to update status:", error)
+      alert("Failed to save status")
+    }
+  }
+
   const handleSyncEmails = async () => {
     setIsSyncing(true)
     try {
@@ -127,6 +153,28 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-serif text-slate-800">{student.name}</h2>
             <span className="text-xl">{student.countryFlag}</span>
+
+            {/* STATUS DROPDOWN */}
+            <div className="relative group">
+              <select
+                value={status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className={`appearance-none pl-3 pr-8 py-1 rounded-full text-xs font-semibold border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 transition-all ${statusColors[status] || statusColors['Lead']}`}
+              >
+                <option value="Lead">New Lead</option>
+                <option value="Discussion">In Discussion</option>
+                <option value="Trial">Scheduled Trial</option>
+                <option value="Active">Active Student</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              {/* Custom Arrow Icon Overlay */}
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </div>
+
           </div>
           <p className="text-sm text-slate-500 mt-1">{student.email}</p>
         </div>

@@ -5,13 +5,15 @@ export interface Message {
   timestamp: Date
 }
 
+export type StudentStatus = 'Lead' | 'Discussion' | 'Trial' | 'Active' | 'Inactive';
+
 export interface Student {
   id: string
   name: string
   email: string
   country: string
   countryFlag: string
-  status: "read" | "unread"
+  status: StudentStatus
   tags: string[]
   messages: Message[]
   lastMessageDate: Date
