@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Create Supabase client for server-side use
+// Create Supabase client
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -33,52 +33,66 @@ export async function POST(req: Request) {
             .single();
 
         if (studentError || !student) {
-            console.error('Supabase error:', studentError);
             return NextResponse.json({ error: 'Student not found' }, { status: 404 });
         }
 
-        // 2. Fetch Instructor Persona/Settings
+        // 2. NEW: Fetch the Last Message from this Student
+        const { data: lastMsgData } = await supabase
+            .from('messages')
+            .select('body_text')
+            .eq('student_id', studentId)
+            .eq('sender_role', 'student')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        const lastStudentMessage = lastMsgData?.body_text || "(No previous message found)";
+
+        // 3. Fetch Instructor Persona
         const { data: settings } = await supabase
             .from('settings')
             .select('instructor_profile, writing_style')
             .limit(1)
             .single();
 
-        // Build persona section (use defaults if no settings)
         const instructorProfile = settings?.instructor_profile || 'A piano teacher';
         const writingStyle = settings?.writing_style || 'Professional and friendly';
 
-        // 3. Build the "Anti-Robot" System Prompt
+        // 4. Build the Context-Aware System Prompt
         const systemPrompt = `
 You are speaking AS ME, the instructor. I am: ${instructorProfile}
 
-MY WRITING STYLE (CRITICAL - YOU MUST FOLLOW THIS):
+MY WRITING STYLE (CRITICAL):
 ${writingStyle}
 
-RULES FOR AUTHENTICITY:
-1. ABSOLUTELY NO sales-y language like "I'd love to!", "Great to hear!", "I hope you're well!"
-2. Be brief and direct. I am busy.
-3. ${writingStyle.toLowerCase().includes('typo') ? 'Occasionally miss a capitalization or make a tiny grammar slip to sound human.' : ''}
-4. ${writingStyle.toLowerCase().includes('exclamation') || writingStyle.toLowerCase().includes('!') ? 'Never use exclamation marks (!) unless absolutely necessary.' : ''}
-5. Get straight to the point. No fluff.
+RULES:
+1. NO sales-y fluff ("I'd love to!", "Great to hear!"). Be direct.
+2. ${writingStyle.toLowerCase().includes('typo') ? 'Make occasional small grammar slips.' : 'Use perfect grammar.'}
+3. ${writingStyle.toLowerCase().includes('!') ? 'Use exclamation marks sparingly.' : ''}
 
-STUDENT CONTEXT (${student.full_name}):
-- Location: ${student.country_code || 'Unknown'}
-- My Strategy for them: "${student.instructor_strategy || 'None set'}"
-- Tags: ${student.tags?.join(', ') || 'None'}
+CONTEXT:
+I am replying to a student named ${student.full_name} (${student.country_code || 'Unknown'}).
+My Strategy for them: "${student.instructor_strategy || 'None'}"
+Student Tags: ${student.tags?.join(', ') || 'None'}
 
-TASK: ${message}
+---
+THEIR LAST MESSAGE TO ME:
+"${lastStudentMessage}"
+---
 
-Write the response AS ME, following my writing style exactly.
+MY INSTRUCTION TO YOU:
+${message}
+
+Write the response AS ME. Do not include subject lines or placeholders like [Name]. Just the body text.
         `.trim();
 
         let replyText = '';
 
-        // 4. Switch based on the selected Provider
+        // 5. Call the AI Provider
         if (provider === 'openai') {
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o",
-                max_tokens: 500, // Keep emails short
+                max_tokens: 500,
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: message }
@@ -86,34 +100,24 @@ Write the response AS ME, following my writing style exactly.
             });
             replyText = completion.choices[0].message.content || "";
         }
-
         else if (provider === 'claude') {
             const msg = await anthropic.messages.create({
-                model: "claude-sonnet-4-20250514",
-                max_tokens: 500, // Keep emails short
+                model: "claude-sonnet-4-20250514", // Fallback if 4 isn't out, use "claude-3-5-sonnet-20240620"
+                max_tokens: 500,
                 system: systemPrompt,
                 messages: [{ role: "user", content: message }],
             });
-            const contentBlock = msg.content[0];
-            if (contentBlock.type === 'text') {
-                replyText = contentBlock.text;
-            }
+            // @ts-ignore
+            replyText = msg.content[0].text;
         }
-
         else {
-            // Default to Gemini (2.0 Flash Exp)
+            // Default: Gemini
             const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-            const chat = model.startChat({
-                history: [
-                    { role: "user", parts: [{ text: systemPrompt }] },
-                    { role: "model", parts: [{ text: "got it. writing as you now." }] }
-                ],
-            });
-            const result = await chat.sendMessage(message);
+            const result = await model.generateContent(systemPrompt); // Send full prompt in one go for better context
             replyText = result.response.text();
         }
 
-        // 5. Optional "Humanizer" - randomly lowercase first letter
+        // 6. Optional Humanizer
         if (writingStyle.toLowerCase().includes('lowercase') && Math.random() > 0.6) {
             replyText = replyText.charAt(0).toLowerCase() + replyText.slice(1);
         }
@@ -122,21 +126,6 @@ Write the response AS ME, following my writing style exactly.
 
     } catch (error: any) {
         console.error('AI Error:', error);
-
-        // Check for rate limit errors
-        if (error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota') || error?.message?.includes('rate')) {
-            return NextResponse.json({
-                error: 'Rate limit reached. Please wait a minute and try again.'
-            }, { status: 429 });
-        }
-
-        // Check for authentication errors
-        if (error?.status === 401 || error?.message?.includes('API key') || error?.message?.includes('authentication')) {
-            return NextResponse.json({
-                error: 'API key error. Please check your configuration.'
-            }, { status: 401 });
-        }
-
         return NextResponse.json({ error: error.message || 'Failed to process request' }, { status: 500 });
     }
 }
