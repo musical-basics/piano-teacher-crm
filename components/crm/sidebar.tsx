@@ -31,8 +31,23 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <div className="h-full border-r border-slate-200 bg-white flex flex-col overflow-hidden">
+      <div className="px-4 mt-6 mb-2">
+        <button
+          onClick={onGoToDashboard}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${selectedStudent === null
+            ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+            : "hover:bg-white hover:shadow-sm text-slate-600"
+            }`}
+        >
+          <LayoutDashboard className={`w-5 h-5 ${selectedStudent === null ? "text-white" : "text-slate-400 group-hover:text-indigo-500"}`} />
+          <div className="text-left">
+            <p className="font-medium text-sm">Dashboard</p>
+          </div>
+        </button>
+      </div>
+
       {/* Header */}
-      <div className="p-6 flex items-center justify-between border-b border-slate-100">
+      <div className="px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-serif text-slate-800">Students</h1>
         <button
           onClick={onAddStudent}
@@ -56,20 +71,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="px-4 mb-2">
-        <button
-          onClick={onGoToDashboard}
-          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${selectedStudent === null
-            ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
-            : "hover:bg-white hover:shadow-sm text-slate-600"
-            }`}
-        >
-          <LayoutDashboard className={`w-5 h-5 ${selectedStudent === null ? "text-white" : "text-slate-400 group-hover:text-indigo-500"}`} />
-          <div className="text-left">
-            <p className="font-medium text-sm">Dashboard</p>
-          </div>
-        </button>
-      </div>
+
 
       {/* Student List */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
