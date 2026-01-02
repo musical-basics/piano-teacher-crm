@@ -218,27 +218,42 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
     // --- 6. ASSET MANAGER HANDLER ---
     const handleInsertAsset = (asset: Asset, variant: 'small' | 'original' = 'original') => {
-        if (asset.file_type.startsWith('image/')) {
-            // Insert Image
-            restoreSelection()
-            editorRef.current?.focus()
-
-            // "Small" means 300px width. "Original" is 100% width (max).
-            const style = variant === 'small'
-                ? "max-width: 300px; height: auto; border-radius: 8px; margin: 10px 0; display: block;"
-                : "max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block;"
-
-            document.execCommand('insertHTML', false, `<img src="${asset.public_url}" style="${style}" /><br/>`)
-        } else {
-            // Insert as Attachment (PDF, etc)
-            setAttachments(prev => [...prev, {
-                file_name: asset.file_name,
-                file_size: asset.file_size,
-                file_type: asset.file_type,
-                storage_path: asset.storage_path
-            }])
-        }
+        // Close the asset manager first
         setShowAssetManager(false)
+
+        // Use setTimeout to ensure the overlay is closed and editor is visible
+        setTimeout(() => {
+            if (asset.file_type.startsWith('image/')) {
+                // "Small" means 300px width. "Original" is 100% width (max).
+                const style = variant === 'small'
+                    ? "max-width: 300px; height: auto; border-radius: 8px; margin: 10px 0; display: block;"
+                    : "max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; display: block;"
+
+                const imgHtml = `<img src="${asset.public_url}" style="${style}" /><br/>`
+
+                // Directly append to editor content since selection is lost
+                if (editorRef.current) {
+                    editorRef.current.innerHTML += imgHtml
+                    setContent(editorRef.current.innerHTML)
+                    // Move cursor to end
+                    editorRef.current.focus()
+                    const range = document.createRange()
+                    range.selectNodeContents(editorRef.current)
+                    range.collapse(false)
+                    const sel = window.getSelection()
+                    sel?.removeAllRanges()
+                    sel?.addRange(range)
+                }
+            } else {
+                // Insert as Attachment (PDF, etc)
+                setAttachments(prev => [...prev, {
+                    file_name: asset.file_name,
+                    file_size: asset.file_size,
+                    file_type: asset.file_type,
+                    storage_path: asset.storage_path
+                }])
+            }
+        }, 50)
     }
 
     // --- CLEANUP ---
