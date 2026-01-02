@@ -32,6 +32,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
     // Asset Manager State
     const [showAssetManager, setShowAssetManager] = useState(false)
+    const savedContentRef = useRef<string>("") // Save content before opening asset manager
 
     // --- UI STATE ---
     const [isMinimized, setIsMinimized] = useState(false)
@@ -217,6 +218,14 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
     }
 
     // --- 6. ASSET MANAGER HANDLER ---
+    const openAssetManager = () => {
+        // Save current editor content before opening overlay
+        if (editorRef.current) {
+            savedContentRef.current = editorRef.current.innerHTML
+        }
+        setShowAssetManager(true)
+    }
+
     const handleInsertAsset = (asset: Asset, variant: 'small' | 'original' = 'original') => {
         // Close the asset manager first
         setShowAssetManager(false)
@@ -231,10 +240,11 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
                 const imgHtml = `<img src="${asset.public_url}" style="${style}" /><br/>`
 
-                // Directly append to editor content since selection is lost
+                // Use saved content + new image
                 if (editorRef.current) {
-                    editorRef.current.innerHTML += imgHtml
-                    setContent(editorRef.current.innerHTML)
+                    const newContent = savedContentRef.current + imgHtml
+                    editorRef.current.innerHTML = newContent
+                    setContent(newContent)
                     // Move cursor to end
                     editorRef.current.focus()
                     const range = document.createRange()
@@ -246,6 +256,10 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                 }
             } else {
                 // Insert as Attachment (PDF, etc)
+                // Also restore the content for non-image assets
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = savedContentRef.current
+                }
                 setAttachments(prev => [...prev, {
                     file_name: asset.file_name,
                     file_size: asset.file_size,
@@ -501,7 +515,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
                                     {/* Asset Library Button */}
                                     <button
-                                        onClick={() => setShowAssetManager(true)}
+                                        onClick={openAssetManager}
                                         className="w-8 h-8 rounded-lg hover:bg-indigo-100 flex items-center justify-center text-indigo-600 transition-colors"
                                         title="Open Asset Library"
                                     >
