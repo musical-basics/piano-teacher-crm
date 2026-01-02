@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import {
     X, Minus, Send, Bold, Italic, Underline, List, ListOrdered,
-    Link, Minimize2, Maximize2, Paperclip, Loader2, Trash2
+    Link, Minimize2, Maximize2, Paperclip, Loader2, Trash2, Image as ImageIcon
 } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -40,6 +40,8 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
     const editorRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    // Ref to track cursor position for image insertion
+    const selectionRangeRef = useRef<Range | null>(null)
 
     // --- 1. LOAD DRAFT ON OPEN ---
     useEffect(() => {
@@ -87,8 +89,22 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
     // --- 2. EDITOR COMMANDS ---
     const execCommand = (command: string, value?: string) => {
+        // Restore selection if we lost it (e.g. clicking a toolbar button)
+        if (selectionRangeRef.current) {
+            const sel = window.getSelection()
+            sel?.removeAllRanges()
+            sel?.addRange(selectionRangeRef.current)
+        }
         document.execCommand(command, false, value)
         editorRef.current?.focus()
+    }
+
+    // Save selection whenever the user clicks or types in the editor
+    const saveSelection = () => {
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0) {
+            selectionRangeRef.current = sel.getRangeAt(0)
+        }
     }
 
     // --- 3. SAVE LOGIC ---
@@ -150,6 +166,61 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
         }
     }
 
+    // --- 5. INLINE IMAGE HANDLING (NEW) ---
+    const uploadInlineImage = async (file: File) => {
+        setIsUploading(true)
+        // We use a specific folder for inline images to keep things organized
+        const filePath = `${student.id}/inline_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+
+        try {
+            const { error: uploadErr } = await supabase.storage.from('attachments').upload(filePath, file)
+            if (uploadErr) throw uploadErr
+
+            // Get Public URL
+            const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(filePath)
+
+            // Insert Image into Editor
+            if (selectionRangeRef.current) {
+                const sel = window.getSelection()
+                sel?.removeAllRanges()
+                sel?.addRange(selectionRangeRef.current)
+            }
+
+            // We insert it with a max-width style so huge images don't break the email layout
+            // Note: execCommand 'insertImage' only accepts URL. We might need to resize it via CSS after insertion
+            // but for simplicity, let's just insert it.
+            document.execCommand('insertHTML', false, `<img src="${urlData.publicUrl}" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" /><br/>`)
+
+        } catch (err) {
+            console.error("Failed to upload inline image:", err)
+            alert("Failed to insert image. Please try again.")
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const handlePaste = async (e: React.ClipboardEvent) => {
+        // If items contain an image, prevent default paste and handle upload
+        const items = e.clipboardData.items
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf("image") !== -1) {
+                e.preventDefault()
+                const file = items[i].getAsFile()
+                if (file) await uploadInlineImage(file)
+                return
+            }
+        }
+    }
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault() // Prevent opening the file in the browser
+        const files = e.dataTransfer.files
+        if (files.length > 0 && files[0].type.startsWith("image/")) {
+            await uploadInlineImage(files[0])
+        }
+    }
+
+    // --- CLEANUP ---
     const handleDiscard = async () => {
         if (draftId) await supabase.from('drafts').delete().eq('id', draftId)
         onClose()
@@ -162,11 +233,9 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
     const handleSendAction = async () => {
         if (!onSend) return
-
         setIsSending(true)
         try {
             await onSend(content, subject, attachments)
-            // If successful, delete the draft
             if (draftId) {
                 await supabase.from('drafts').delete().eq('id', draftId)
             }
@@ -188,7 +257,6 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
     // --- RENDER ---
     if (!isOpen && !isMinimized) return null
 
-    // Minimized state
     if (isMinimized) {
         return (
             <div className="fixed bottom-0 right-6 w-72 bg-white rounded-t-xl shadow-2xl border border-slate-200 z-50">
@@ -218,7 +286,6 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
         )
     }
 
-    // Full modal
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
@@ -236,6 +303,11 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                         {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
                         {!isSaving && lastSaved && (
                             <span className="text-[10px] text-slate-400">Saved</span>
+                        )}
+                        {isUploading && (
+                            <span className="text-[10px] text-indigo-300 flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Uploading image...
+                            </span>
                         )}
                     </div>
                     <div className="flex items-center gap-1">
@@ -304,7 +376,12 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                         onKeyDown={handleKeyDown}
                         onInput={(e) => setContent(e.currentTarget.innerHTML)}
                         onBlur={saveDraft}
-                        data-placeholder="Write your message..."
+                        // NEW: Event Handlers for Images
+                        onPaste={handlePaste}
+                        onDrop={handleDrop}
+                        onMouseUp={saveSelection} // Track cursor position
+                        onKeyUp={saveSelection}   // Track cursor position
+                        data-placeholder="Write your message... (Paste images directly!)"
                         className="w-full h-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none leading-relaxed overflow-y-auto"
                         style={{ whiteSpace: "pre-wrap" }}
                     />
@@ -331,7 +408,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                         {/* Send button */}
                         <button
                             onClick={handleSendAction}
-                            disabled={!content.trim() || isSending}
+                            disabled={!content.trim() || isSending || isUploading}
                             className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {isSending ? (
@@ -343,50 +420,35 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
                         {/* Formatting tools */}
                         <div className="flex items-center ml-3 pl-3 border-l border-slate-200">
-                            <button
-                                onClick={() => execCommand('bold')}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Bold"
-                            >
+                            <button onClick={() => execCommand('bold')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bold">
                                 <Bold className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={() => execCommand('italic')}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Italic"
-                            >
+                            <button onClick={() => execCommand('italic')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Italic">
                                 <Italic className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={() => execCommand('underline')}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Underline"
-                            >
+                            <button onClick={() => execCommand('underline')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Underline">
                                 <Underline className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={() => {
-                                    const url = prompt("Enter URL:")
-                                    if (url) execCommand('createLink', url)
-                                }}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Insert Link"
-                            >
+                            <button onClick={() => {
+                                const url = prompt("Enter URL:")
+                                if (url) execCommand('createLink', url)
+                            }} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Insert Link">
                                 <Link className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={() => execCommand('insertUnorderedList')}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Bullet List"
-                            >
+                            <button onClick={() => execCommand('insertUnorderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bullet List">
                                 <List className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={() => execCommand('insertOrderedList')}
-                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                title="Numbered List"
-                            >
+                            <button onClick={() => execCommand('insertOrderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Numbered List">
                                 <ListOrdered className="w-4 h-4" />
+                            </button>
+
+                            {/* Insert Image Button (Manual) */}
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Insert Image"
+                            >
+                                <ImageIcon className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -396,7 +458,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                            title="Attach files"
+                            title="Attach files or images"
                         >
                             {isUploading ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -407,7 +469,14 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
                                 ref={fileInputRef}
                                 type="file"
                                 className="hidden"
-                                onChange={handleFileSelect}
+                                onChange={(e) => {
+                                    // If it's an image, insert inline. If PDF/other, attach.
+                                    if (e.target.files && e.target.files[0] && e.target.files[0].type.startsWith('image/')) {
+                                        uploadInlineImage(e.target.files[0])
+                                    } else {
+                                        handleFileSelect(e)
+                                    }
+                                }}
                                 multiple
                             />
                         </button>
