@@ -315,6 +315,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         onClose={() => setIsComposeOpen(false)}
         student={student}
         messages={student.messages} // Pass messages for reply chain
+        initialContent={message} // Pass quick response text
         onSend={handleSendEmail} // Pass the API-connected function here
       />
 

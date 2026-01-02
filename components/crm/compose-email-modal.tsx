@@ -22,10 +22,11 @@ interface ComposeEmailModalProps {
     onClose: () => void
     student: Student
     messages?: Message[] // Conversation history for reply chain
+    initialContent?: string // Text to pre-fill (e.g. from quick response)
     onSend?: (content: string, subject: string, attachments: Attachment[], cleanContent?: string) => Promise<void>
 }
 
-export function ComposeEmailModal({ isOpen, onClose, student, messages = [], onSend }: ComposeEmailModalProps) {
+export function ComposeEmailModal({ isOpen, onClose, student, messages = [], initialContent = "", onSend }: ComposeEmailModalProps) {
     // --- STATE ---
     const [subject, setSubject] = useState("Re: Lesson Follow-up")
     const [content, setContent] = useState("")
@@ -51,9 +52,22 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], onS
     // Ref to track cursor position for image insertion
     const selectionRangeRef = useRef<Range | null>(null)
 
-    // --- 1. LOAD DRAFT ON OPEN ---
+    // --- 1. LOAD DRAFT OR INITIAL CONTENT ON OPEN ---
     useEffect(() => {
         if (!isOpen || !student.id) return
+
+        // If we have initial content passed (e.g. from quick response), use that
+        if (initialContent && initialContent.trim() !== "") {
+            setDraftId(null) // Treat as new draft
+            setSubject("Re: Lesson Follow-up")
+            setContent(initialContent)
+            setAttachments([])
+            if (editorRef.current) {
+                editorRef.current.innerHTML = initialContent
+            }
+            setLastSaved(null)
+            return
+        }
 
         const loadDraft = async () => {
             setIsLoadingDraft(true)
