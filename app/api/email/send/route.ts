@@ -8,7 +8,8 @@ const OAuth2 = google.auth.OAuth2;
 export async function POST(req: Request) {
     console.log("Email send route hit");
     try {
-        const { to, subject, htmlContent, studentId } = await req.json();
+        const reqBody = await req.json();
+        const { to, subject, htmlContent, studentId } = reqBody;
         console.log("Received payload:", { to, subject, studentId });
 
         const oauth2Client = new OAuth2(
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
 
         console.log("Sending mail via transporter...");
         const info = await transporter.sendMail({
-            from: `"Lionel from MusicalBasics" <${process.env.GMAIL_USER}>`,
+            from: `"Lionel Yu From MusicalBasics" <${process.env.GMAIL_USER}>`,
             to: to,
             subject: subject,
             html: htmlContent,
@@ -53,10 +54,13 @@ export async function POST(req: Request) {
 
         if (studentId) {
             console.log("Inserting into database...");
+            // Use cleanContent (without reply chain) for DB if available, otherwise fallback to htmlContent
+            const dbContent = (reqBody.cleanContent || htmlContent);
+
             const { error } = await supabase.from('messages').insert({
                 student_id: studentId,
                 sender_role: 'instructor',
-                body_text: htmlContent,
+                body_text: dbContent,
                 gmail_message_id: info.messageId,
                 created_at: new Date().toISOString()
             });

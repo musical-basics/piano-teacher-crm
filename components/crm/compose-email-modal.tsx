@@ -4,9 +4,10 @@ import {
     X, Minus, Send, Bold, Italic, Underline, List, ListOrdered,
     Link, Minimize2, Maximize2, Paperclip, Loader2, Trash2, Image as ImageIcon, FolderOpen
 } from "lucide-react"
-import type { Student } from "@/lib/types"
+import type { Student, Message } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
 import { AssetManager, Asset } from "./asset-manager"
+import { generateReplyChainHtml } from "@/lib/reply-chain"
 
 interface Attachment {
     id?: string
@@ -20,13 +21,15 @@ interface ComposeEmailModalProps {
     isOpen: boolean
     onClose: () => void
     student: Student
-    onSend?: (content: string, subject: string, attachments: Attachment[]) => Promise<void>
+    messages?: Message[] // Conversation history for reply chain
+    onSend?: (content: string, subject: string, attachments: Attachment[], cleanContent?: string) => Promise<void>
 }
 
-export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeEmailModalProps) {
+export function ComposeEmailModal({ isOpen, onClose, student, messages = [], onSend }: ComposeEmailModalProps) {
     // --- STATE ---
     const [subject, setSubject] = useState("Re: Lesson Follow-up")
     const [content, setContent] = useState("")
+    const [replyChainHtml, setReplyChainHtml] = useState("")
     const [draftId, setDraftId] = useState<string | null>(null)
     const [attachments, setAttachments] = useState<Attachment[]>([])
 
@@ -91,6 +94,21 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
 
         loadDraft()
     }, [isOpen, student.id])
+
+    // --- GENERATE REPLY CHAIN WHEN MODAL OPENS ---
+    useEffect(() => {
+        if (!isOpen || messages.length === 0) {
+            setReplyChainHtml("")
+            return
+        }
+
+        const chainHtml = generateReplyChainHtml(messages, {
+            studentName: student.name,
+            studentEmail: student.email,
+            maxMessages: 10
+        })
+        setReplyChainHtml(chainHtml)
+    }, [isOpen, messages, student.name, student.email])
 
     // --- 2. EDITOR COMMANDS ---
     const execCommand = (command: string, value?: string) => {
@@ -285,7 +303,13 @@ export function ComposeEmailModal({ isOpen, onClose, student, onSend }: ComposeE
         if (!onSend) return
         setIsSending(true)
         try {
-            await onSend(content, subject, attachments)
+            // Append reply chain to the content when sending
+            const fullContent = replyChainHtml
+                ? content + replyChainHtml
+                : content
+
+            // Pass both full HTML (for email) and clean content (for DB)
+            await onSend(fullContent, subject, attachments, content)
             if (draftId) {
                 await supabase.from('drafts').delete().eq('id', draftId)
             }

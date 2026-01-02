@@ -7,6 +7,7 @@ import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
 import { ComposeEmailModal } from "./compose-email-modal"
 import { SeedMessageModal } from "./seed-message-modal"
+import { generateReplyChainHtml } from "@/lib/reply-chain"
 
 interface ConversationPaneProps {
   student: Student
@@ -89,7 +90,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   }
 
   // --- THE FIX: Call the API Route ---
-  const handleSendEmail = async (content: string, subject: string, attachments: any[]) => {
+  const handleSendEmail = async (content: string, subject: string, attachments: any[], cleanContent?: string) => {
     if (!content.trim()) return
 
     setIsSending(true)
@@ -108,6 +109,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           to: student.email,
           subject: subject || "Re: Piano Lessons", // Fallback subject
           htmlContent: content,
+          cleanContent: cleanContent || content, // Pass clean content for DB
           studentId: student.id // Use this ID to save to DB automatically
         })
       });
@@ -122,7 +124,8 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
       // 2. Success! Update UI
       // (The API route already saved it to Supabase, but we update locally to see it instantly)
-      onSendMessage(content, subject)
+      // Use cleanContent for the local UI update too!
+      onSendMessage(cleanContent || content, subject)
 
       // Clear inputs
       setMessage("")
@@ -137,8 +140,18 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
   const handleQuickSend = async () => {
     if (!message.trim()) return
-    // Default subject for quick chats
-    await handleSendEmail(message, `Re: Piano Lessons - ${student.name}`, [])
+
+    // Generate reply chain for quick send (same as full compose)
+    const replyChainHtml = student.messages.length > 0
+      ? generateReplyChainHtml(student.messages, {
+        studentName: student.name,
+        studentEmail: student.email,
+        maxMessages: 10
+      })
+      : ""
+
+    const fullContent = replyChainHtml ? message + replyChainHtml : message
+    await handleSendEmail(fullContent, `Re: Piano Lessons - ${student.name}`, [], message)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -301,6 +314,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         student={student}
+        messages={student.messages} // Pass messages for reply chain
         onSend={handleSendEmail} // Pass the API-connected function here
       />
 
