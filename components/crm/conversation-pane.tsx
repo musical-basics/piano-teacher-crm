@@ -1,7 +1,7 @@
 "use client"
 import type React from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2, RefreshCw } from "lucide-react"
+import { Send, Paperclip, Eye, Sprout, Maximize2, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import type { Student } from "@/lib/types"
 import { formatTime } from "@/lib/date-utils"
@@ -138,6 +138,20 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
     }
   }
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm("Are you sure you want to delete this message? This cannot be undone.")) return
+
+    const { error } = await supabase.from('messages').delete().eq('id', messageId)
+
+    if (error) {
+      console.error("Failed to delete message:", error)
+      alert("Failed to delete message")
+    } else {
+      // Reload to refresh the list (simplest way to re-sync props)
+      window.location.reload()
+    }
+  }
+
   const handleQuickSend = async () => {
     if (!message.trim()) return
 
@@ -225,15 +239,33 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
                   </p>
                 </div>
                 {!isInstructor && (
+                  <>
+                    <button
+                      onClick={() => setViewingOriginal(viewingOriginal === msg.id ? null : msg.id)}
+                      className={`absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${viewingOriginal === msg.id
+                        ? "bg-indigo-100 text-indigo-600"
+                        : "bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100"
+                        } hover:bg-indigo-100 hover:text-indigo-600`}
+                      title="View original email"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      className="absolute -right-16 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 bg-white shadow-sm border border-slate-100"
+                      title="Delete message"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+                {isInstructor && (
                   <button
-                    onClick={() => setViewingOriginal(viewingOriginal === msg.id ? null : msg.id)}
-                    className={`absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${viewingOriginal === msg.id
-                      ? "bg-indigo-100 text-indigo-600"
-                      : "bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100"
-                      } hover:bg-indigo-100 hover:text-indigo-600`}
-                    title="View original email"
+                    onClick={() => handleDeleteMessage(msg.id)}
+                    className="absolute -left-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all bg-slate-200 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 bg-white shadow-sm border border-slate-100"
+                    title="Delete message"
                   >
-                    <Eye className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {viewingOriginal === msg.id && (
