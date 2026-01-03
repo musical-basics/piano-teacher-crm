@@ -109,19 +109,32 @@ export async function POST(req: Request) {
             for (const msg of messages) {
                 if (!msg.id) continue;
 
-                const { data: existing } = await supabase
+                // Check if already exists by Gmail internal ID
+                const { data: existingById } = await supabase
                     .from('messages')
                     .select('id')
                     .eq('gmail_message_id', msg.id)
                     .single();
 
-                if (existing) continue;
+                if (existingById) continue;
 
                 const fullEmail = await gmail.users.messages.get({
                     userId: 'me',
                     id: msg.id,
                     format: 'full'
                 });
+
+                // Also check by RFC Message-ID header (for emails sent from CRM)
+                const messageIdHeader = fullEmail.data.payload?.headers?.find(h => h.name === 'Message-ID' || h.name === 'Message-Id');
+                if (messageIdHeader?.value) {
+                    const { data: existingByHeader } = await supabase
+                        .from('messages')
+                        .select('id')
+                        .eq('gmail_message_id', messageIdHeader.value)
+                        .single();
+
+                    if (existingByHeader) continue;
+                }
 
                 const body = extractBody(fullEmail.data.payload);
 
