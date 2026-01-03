@@ -7,39 +7,62 @@ import EmailReplyParser from 'node-email-reply-parser';
 const OAuth2 = google.auth.OAuth2;
 
 // --- Helper to Dig for Text (Simplified) ---
+// --- Helper to Dig for Text (Improved Recursive) ---
+function findPart(parts: any[], mimeType: string): any {
+    for (const part of parts) {
+        if (part.mimeType === mimeType) {
+            return part;
+        }
+        if (part.parts) {
+            const found = findPart(part.parts, mimeType);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
 function extractBody(payload: any): string {
     if (!payload) return "";
     let text = "";
 
-    // 1. Try to find the Plain Text version first (Easiest to clean)
+    // 1. Try recursive search for text/plain
     if (payload.parts) {
-        const textPart = payload.parts.find((p: any) => p.mimeType === 'text/plain');
+        const textPart = findPart(payload.parts, 'text/plain');
         if (textPart && textPart.body && textPart.body.data) {
             text = Buffer.from(textPart.body.data, 'base64').toString('utf-8');
         }
     }
 
-    // 2. Fallback: If no parts, check the main body
+    // 2. Fallback: Check main body if not found yet
     if (!text && payload.body && payload.body.data) {
         text = Buffer.from(payload.body.data, 'base64').toString('utf-8');
     }
 
-    // 3. If we still have nothing, try to find HTML and strip tags (Last resort)
+    // 3. Recursive search for text/html (if no plain text found)
     if (!text && payload.parts) {
-        const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
+        const htmlPart = findPart(payload.parts, 'text/html');
         if (htmlPart && htmlPart.body && htmlPart.body.data) {
             const html = Buffer.from(htmlPart.body.data, 'base64').toString('utf-8');
-            // rudimentary html-to-text just to have something
-            text = html.replace(/<[^>]*>/g, ' ').trim();
+            // Remove styles and scripts first
+            const noScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, "")
+                .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, "");
+            // rudimentary html-to-text
+            text = noScripts.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         }
     }
 
-    // --- THE MAGIC: Use the library to clean the reply ---
-    // The library exports a function: parse(text, visibleTextOnly)
-    // We pass true to get just the visible text immediately
-    const cleanText = EmailReplyParser(text, true);
+    // If still empty (maybe it was just an attachment?), try snippet
+    // (Note: 'snippet' is on the message object, usually passed down, but here we only have payload.
+    // We might miss it if we don't pass the whole message object. But payload doesn't have snippet.)
 
-    return ((cleanText as string) || text); // Fallback to original if cleaner empties it
+    // --- THE MAGIC: Use the library to clean the reply ---
+    try {
+        const cleanText = EmailReplyParser(text, true);
+        return ((cleanText as string) || text);
+    } catch (e) {
+        console.error("Reply parsing failed", e);
+        return text;
+    }
 }
 
 export async function POST(req: Request) {
