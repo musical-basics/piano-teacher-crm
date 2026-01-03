@@ -94,48 +94,57 @@ export async function POST(req: Request) {
 
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-        // Get emails from the last 30 days
-        const response = await gmail.users.messages.list({
-            userId: 'me',
-            q: `from:${studentEmail} newer_than:30d`,
-            maxResults: 5
-        });
-
-        const messages = response.data.messages || [];
         let newCount = 0;
 
-        for (const msg of messages) {
-            if (!msg.id) continue;
-
-            const { data: existing } = await supabase
-                .from('messages')
-                .select('id')
-                .eq('gmail_message_id', msg.id)
-                .single();
-
-            if (existing) continue;
-
-            const fullEmail = await gmail.users.messages.get({
+        // Helper to process messages
+        const processMessages = async (query: string, defaultRole: 'student' | 'instructor') => {
+            const response = await gmail.users.messages.list({
                 userId: 'me',
-                id: msg.id,
-                format: 'full'
+                q: query,
+                maxResults: 10
             });
 
-            const body = extractBody(fullEmail.data.payload);
+            const messages = response.data.messages || [];
 
-            const dateHeader = fullEmail.data.payload?.headers?.find(h => h.name === 'Date');
-            const createdAt = dateHeader ? new Date(dateHeader.value!).toISOString() : new Date().toISOString();
+            for (const msg of messages) {
+                if (!msg.id) continue;
 
-            await supabase.from('messages').insert({
-                student_id: studentId,
-                sender_role: 'student',
-                body_text: body,
-                gmail_message_id: msg.id,
-                created_at: createdAt
-            });
+                const { data: existing } = await supabase
+                    .from('messages')
+                    .select('id')
+                    .eq('gmail_message_id', msg.id)
+                    .single();
 
-            newCount++;
-        }
+                if (existing) continue;
+
+                const fullEmail = await gmail.users.messages.get({
+                    userId: 'me',
+                    id: msg.id,
+                    format: 'full'
+                });
+
+                const body = extractBody(fullEmail.data.payload);
+
+                const dateHeader = fullEmail.data.payload?.headers?.find(h => h.name === 'Date');
+                const createdAt = dateHeader ? new Date(dateHeader.value!).toISOString() : new Date().toISOString();
+
+                await supabase.from('messages').insert({
+                    student_id: studentId,
+                    sender_role: defaultRole,
+                    body_text: body,
+                    gmail_message_id: msg.id,
+                    created_at: createdAt
+                });
+
+                newCount++;
+            }
+        };
+
+        // 1. Sync emails FROM the student (incoming replies)
+        await processMessages(`from:${studentEmail} newer_than:30d`, 'student');
+
+        // 2. Sync emails TO the student (sent from Gmail)
+        await processMessages(`to:${studentEmail} newer_than:30d`, 'instructor');
 
         return NextResponse.json({ success: true, count: newCount });
 
