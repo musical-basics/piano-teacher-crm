@@ -233,7 +233,26 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
                   className={`px-5 py-3 rounded-3xl ${isInstructor ? "bg-indigo-600 text-white" : "bg-white text-slate-700 shadow-sm"
                     }`}
                 >
-                  <p className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${isInstructor ? "text-white" : "text-slate-700"}`}>
+                    {/* Auto-linkify URLs */}
+                    {msg.content.split(/(https?:\/\/[^\s]+)/g).map((part, i) => {
+                      if (part.match(/https?:\/\/[^\s]+/)) {
+                        return (
+                          <a
+                            key={i}
+                            href={part}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`underline ${isInstructor ? "text-indigo-200 hover:text-white" : "text-blue-500 hover:text-blue-700"}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {part}
+                          </a>
+                        )
+                      }
+                      return part
+                    })}
+                  </div>
                   <p className={`text-xs mt-2 ${isInstructor ? "text-indigo-200" : "text-slate-400"}`}>
                     {formatTime(msg.timestamp)}
                   </p>

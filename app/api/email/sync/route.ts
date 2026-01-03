@@ -46,8 +46,21 @@ function extractBody(payload: any): string {
             // Remove styles and scripts first
             const noScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, "")
                 .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, "");
+
+            // Replace common block tags with newlines
+            const withNewlines = noScripts
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<\/p>/gi, '\n\n')
+                .replace(/<\/div>/gi, '\n')
+                .replace(/<\/tr>/gi, '\n')
+                .replace(/<\/li>/gi, '\n');
+
             // rudimentary html-to-text
-            text = noScripts.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            text = withNewlines
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/[ \t]+/g, ' ')        // Collapse only spaces/tabs
+                .replace(/\n\s+\n/g, '\n\n')    // Collapse multiple empty lines
+                .trim();
         }
     }
 
