@@ -146,6 +146,25 @@ export async function POST(req: Request) {
         // 2. Sync emails TO the student (sent from Gmail)
         await processMessages(`to:${studentEmail} newer_than:30d`, 'instructor');
 
+        // 3. Update the student's last_contacted_at to ensure proper sorting
+        if (newCount > 0) {
+            // Find the latest message timestamp for this student
+            const { data: latestMsg } = await supabase
+                .from('messages')
+                .select('created_at')
+                .eq('student_id', studentId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (latestMsg) {
+                await supabase
+                    .from('students')
+                    .update({ last_contacted_at: latestMsg.created_at })
+                    .eq('id', studentId);
+            }
+        }
+
         return NextResponse.json({ success: true, count: newCount });
 
     } catch (error: any) {
