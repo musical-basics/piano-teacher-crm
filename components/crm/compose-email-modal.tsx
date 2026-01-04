@@ -376,13 +376,10 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={handleClose} />
-
-            {/* Modal */}
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-end justify-end p-6">
+            {/* Modal - Docked to bottom right */}
             <div
-                className={`relative bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${isMaximized ? "w-[90vw] h-[90vh]" : "w-[700px] h-[600px]"
+                className={`pointer-events-auto relative bg-white rounded-t-xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 border border-slate-200 ${isMaximized ? "w-[90vw] h-[80vh]" : "w-[600px] h-[600px]"
                     }`}
             >
                 {/* --- ASSET MANAGER OVERLAY --- */}
@@ -396,7 +393,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
                 ) : (
                     <>
                         {/* Header */}
-                        <div className="flex items-center justify-between px-5 py-3 bg-slate-800 rounded-t-2xl">
+                        <div className="flex items-center justify-between px-5 py-3 bg-slate-800 rounded-t-xl">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-white">New Message</span>
                                 {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}

@@ -1,6 +1,6 @@
 "use client"
 
-import { Sparkles, Globe, Pencil, Send, Loader2, ChevronDown } from "lucide-react"
+import { Sparkles, Globe, Pencil, Send, Loader2, ChevronDown, Bot } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabaseClient"
 type AIProvider = 'gemini' | 'openai' | 'claude'
 
 interface ChatMessage {
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "system" // Added 'system' for status updates
   content: string
   provider?: AIProvider
 }
@@ -34,12 +34,35 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
   const [isProviderOpen, setIsProviderOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Reset state when student changes
+  // Track if we have already auto-analyzed this specific student session
+  // This prevents it from running every time you type a letter
+  const hasAnalyzedRef = useRef(false)
+
+  // --- 1. RESET STATE ON STUDENT CHANGE ---
   useEffect(() => {
     setStrategy(student.instructorNotes || "")
     setMessages([])
     setInputMessage("")
+    hasAnalyzedRef.current = false // Reset analysis flag
   }, [student.id])
+
+  // --- 2. AUTO-ANALYZE LOGIC (THE NEW PART) ---
+  useEffect(() => {
+    // If we've already run for this student, stop.
+    if (hasAnalyzedRef.current) return
+
+    // Check if we have messages to analyze
+    if (!student.messages || student.messages.length === 0) return
+
+    // Get the very last message
+    const lastMessage = student.messages[student.messages.length - 1]
+
+    // ONLY auto-draft if the LAST message was from the STUDENT
+    if (lastMessage.sender === 'student') {
+      hasAnalyzedRef.current = true // Mark as done
+      handleAutoDraft()
+    }
+  }, [student.id, student.messages])
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -48,18 +71,14 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
 
   // Save strategy to Supabase when user clicks away
   const handleStrategySave = async () => {
-    if (strategy === student.instructorNotes) return // No changes
-
+    if (strategy === student.instructorNotes) return
     setIsSaving(true)
     try {
       const { error } = await supabase
         .from("students")
         .update({ instructor_strategy: strategy })
         .eq("id", student.id)
-
-      if (error) {
-        console.error("Error saving strategy:", error)
-      }
+      if (error) console.error("Error saving strategy:", error)
     } catch (error) {
       console.error("Error saving strategy:", error)
     } finally {
@@ -67,15 +86,51 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     }
   }
 
-  // Send message to AI API
+  // --- 3. AUTO DRAFT FUNCTION ---
+  const handleAutoDraft = async () => {
+    setIsLoading(true)
+
+    // Add a temporary "Thinking" status
+    setMessages(prev => [...prev, {
+      role: "system",
+      content: `New message detected from ${student.name}. Drafting a reply...`
+    }])
+
+    try {
+      const response = await fetch("/api/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // We tell the AI explicit instructions for this auto-draft
+          message: "The student just replied. Based on their last message, draft a helpful response.",
+          studentId: student.id,
+          provider: provider,
+        }),
+      })
+      const data = await response.json()
+
+      if (data.error) {
+        setMessages(prev => [...prev, { role: "assistant", content: `Error: ${data.error}` }])
+      } else {
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: data.reply, provider: data.provider || provider }
+        ])
+      }
+    } catch (error) {
+      console.error("Error calling AI:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Manual Send (User types something)
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
-
     const userMessage = inputMessage.trim()
     setInputMessage("")
 
-    // Add user message to chat
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }])
+    setMessages(prev => [...prev, { role: "user", content: userMessage }])
     setIsLoading(true)
 
     try {
@@ -88,26 +143,16 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
           provider: provider,
         }),
       })
-
       const data = await response.json()
 
       if (data.error) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Error: ${data.error}`, provider },
-        ])
+        setMessages(prev => [...prev, { role: "assistant", content: `Error: ${data.error}`, provider }])
       } else {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: data.reply, provider: data.provider || provider },
-        ])
+        setMessages(prev => [...prev, { role: "assistant", content: data.reply, provider: data.provider || provider }])
       }
     } catch (error) {
       console.error("Error calling AI:", error)
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, I encountered an error. Please try again.", provider },
-      ])
+      setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error.", provider }])
     } finally {
       setIsLoading(false)
     }
@@ -120,22 +165,12 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     }
   }
 
-  // Generate initial greeting based on student context
+  // Generate initial greeting text (Static)
   const getInitialGreeting = () => {
     const hasStrategy = strategy.trim().length > 0
     const strategyPreview = hasStrategy
       ? ` I'll apply your strategy: "${strategy.slice(0, 60)}${strategy.length > 60 ? "..." : ""}"`
       : ""
-
-    if (student.tags.includes("Performance Anxiety")) {
-      return `I've analyzed ${student.name}'s profile. They may need extra encouragement about their recital.${strategyPreview} How can I help?`
-    }
-    if (student.tags.includes("Parent")) {
-      return `${student.name} is a parent inquiring about lessons.${strategyPreview} I can help you draft a family-friendly response.`
-    }
-    if (student.tags.includes("Exam Prep")) {
-      return `${student.name} is preparing for exams.${strategyPreview} Want me to help with study tips or encouragement?`
-    }
     return `Ready to help with ${student.name}.${strategyPreview} What would you like me to draft?`
   }
 
@@ -204,7 +239,6 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
             <span className="font-medium text-slate-700 text-sm">AI Co-Pilot</span>
           </div>
 
-          {/* Provider Dropdown */}
           <div className="relative">
             <button
               onClick={() => setIsProviderOpen(!isProviderOpen)}
@@ -255,15 +289,21 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-teal-400 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="w-3.5 h-3.5 text-white" />
                 </div>
+              ) : msg.role === "system" ? (
+                // Small system badge for "Drafting reply..."
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-slate-300" />
+                </div>
               ) : (
                 <div className="w-7 h-7 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-medium text-indigo-600">You</span>
                 </div>
               )}
+
               <div
-                className={`flex-1 p-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user"
-                  ? "bg-indigo-500 text-white ml-8"
-                  : "bg-slate-100 text-slate-700 mr-8"
+                className={`flex-1 p-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-500 text-white ml-8"
+                    : msg.role === "system" ? "bg-slate-50 text-slate-500 italic border border-slate-100 mr-8"
+                      : "bg-slate-100 text-slate-700 mr-8"
                   }`}
               >
                 {msg.content}
