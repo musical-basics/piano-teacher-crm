@@ -49,6 +49,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
 
     const editorRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const attachmentInputRef = useRef<HTMLInputElement>(null)
     // Ref to track cursor position for image insertion
     const selectionRangeRef = useRef<Range | null>(null)
 
@@ -550,6 +551,17 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
                                     >
                                         <ImageIcon className="w-4 h-4" />
                                     </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                                uploadInlineImage(e.target.files[0])
+                                            }
+                                        }}
+                                    />
 
                                     {/* Asset Library Button */}
                                     <button
@@ -565,29 +577,24 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
                             <div className="flex items-center gap-1">
                                 {/* Attach */}
                                 <button
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={() => attachmentInputRef.current?.click()}
                                     className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                    title="Attach files or images"
+                                    title="Attach files"
                                 >
                                     {isUploading ? (
                                         <Loader2 className="w-5 h-5 animate-spin" />
                                     ) : (
                                         <Paperclip className="w-5 h-5" />
                                     )}
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files[0] && e.target.files[0].type.startsWith('image/')) {
-                                                uploadInlineImage(e.target.files[0])
-                                            } else {
-                                                handleFileSelect(e)
-                                            }
-                                        }}
-                                        multiple
-                                    />
                                 </button>
+                                <input
+                                    ref={attachmentInputRef}
+                                    type="file"
+                                    className="hidden"
+                                    onChange={handleFileSelect}
+                                    multiple
+                                />
+
                                 {/* Delete */}
                                 <button
                                     onClick={handleDiscard}

@@ -110,7 +110,8 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           subject: subject || "Re: Piano Lessons", // Fallback subject
           htmlContent: content,
           cleanContent: cleanContent || content, // Pass clean content for DB
-          studentId: student.id // Use this ID to save to DB automatically
+          studentId: student.id, // Use this ID to save to DB automatically
+          attachments: attachments // Pass attachments to the API
         })
       });
 
