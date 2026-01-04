@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
         // 1. Fetch Student Context
         const { data: student, error: studentError } = await supabase
-            .from('students')
+            .from('crm_students')
             .select('full_name, country_code, instructor_strategy, tags')
             .eq('id', studentId)
             .single();
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
         // 2. NEW: Fetch the Last Message from this Student
         const { data: lastMsgData } = await supabase
-            .from('messages')
+            .from('crm_messages')
             .select('body_text')
             .eq('student_id', studentId)
             .eq('sender_role', 'student')

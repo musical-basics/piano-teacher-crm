@@ -18,4 +18,5 @@ export interface Student {
   messages: Message[]
   lastMessageDate: Date
   instructorNotes?: string
+  experienceLevel?: string
 }

@@ -111,7 +111,7 @@ export async function POST(req: Request) {
 
                 // Check if already exists by Gmail internal ID
                 const { data: existingById } = await supabase
-                    .from('messages')
+                    .from('crm_messages')
                     .select('id')
                     .eq('gmail_message_id', msg.id)
                     .single();
@@ -128,7 +128,7 @@ export async function POST(req: Request) {
                 const messageIdHeader = fullEmail.data.payload?.headers?.find(h => h.name === 'Message-ID' || h.name === 'Message-Id');
                 if (messageIdHeader?.value) {
                     const { data: existingByHeader } = await supabase
-                        .from('messages')
+                        .from('crm_messages')
                         .select('id')
                         .eq('gmail_message_id', messageIdHeader.value)
                         .single();
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
                 const dateHeader = fullEmail.data.payload?.headers?.find(h => h.name === 'Date');
                 const createdAt = dateHeader ? new Date(dateHeader.value!).toISOString() : new Date().toISOString();
 
-                await supabase.from('messages').insert({
+                await supabase.from('crm_messages').insert({
                     student_id: studentId,
                     sender_role: defaultRole,
                     body_text: body,
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
         if (newCount > 0) {
             // Find the latest message timestamp for this student
             const { data: latestMsg } = await supabase
-                .from('messages')
+                .from('crm_messages')
                 .select('created_at')
                 .eq('student_id', studentId)
                 .order('created_at', { ascending: false })
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
 
             if (latestMsg) {
                 await supabase
-                    .from('students')
+                    .from('crm_students')
                     .update({ last_contacted_at: latestMsg.created_at })
                     .eq('id', studentId);
             }

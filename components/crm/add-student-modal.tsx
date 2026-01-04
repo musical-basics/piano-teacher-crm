@@ -34,13 +34,14 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
     try {
       // 1. Insert Student
       const { data: student, error: studentError } = await supabase
-        .from('students')
+        .from('crm_students')
         .insert({
           full_name: name,
           email: email,
           country_code: country || 'US',
-          status: 'active',
-          last_contacted_at: new Date(inquiryDate).toISOString() // Use inquiry date & time
+          status: 'Lead', // Default to Lead as per SQL
+          last_contacted_at: new Date(inquiryDate).toISOString(),
+          notes: initialNote // Store initial inquiry in notes too
         })
         .select()
         .single()
@@ -53,7 +54,7 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
       // 2. Insert Initial Note (as a message from the student)
       if (initialNote.trim()) {
         const { error: msgError } = await supabase
-          .from('messages')
+          .from('crm_messages')
           .insert({
             student_id: student.id,
             sender_role: 'student', // It's their inquiry

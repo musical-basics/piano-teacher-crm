@@ -93,7 +93,7 @@ export async function POST(req: Request) {
             // Use cleanContent (without reply chain) for DB if available, otherwise fallback to htmlContent
             const dbContent = (cleanContent || htmlContent);
 
-            const { error } = await supabase.from('messages').insert({
+            const { error } = await supabase.from('crm_messages').insert({
                 student_id: studentId,
                 sender_role: 'instructor',
                 body_text: dbContent,

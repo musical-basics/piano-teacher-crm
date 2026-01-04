@@ -45,7 +45,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
 
     // Update Database
     const { error } = await supabase
-      .from('students')
+      .from('crm_students')
       .update({ status: newStatus })
       .eq('id', student.id)
 
@@ -142,7 +142,7 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const handleDeleteMessage = async (messageId: string) => {
     if (!confirm("Are you sure you want to delete this message? This cannot be undone.")) return
 
-    const { error } = await supabase.from('messages').delete().eq('id', messageId)
+    const { error } = await supabase.from('crm_messages').delete().eq('id', messageId)
 
     if (error) {
       console.error("Failed to delete message:", error)

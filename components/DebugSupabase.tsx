@@ -14,7 +14,7 @@ export default function DebugSupabase({ isOpen, onClose }: DebugSupabaseProps) {
     const [loading, setLoading] = useState(false)
 
     const fetchStudents = async () => {
-        const { data, error } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+        const { data, error } = await supabase.from("crm_students").select("*").order("created_at", { ascending: false })
         if (error) {
             console.error("Error fetching students:", error)
         } else {
@@ -37,7 +37,7 @@ export default function DebugSupabase({ isOpen, onClose }: DebugSupabaseProps) {
             status: "new",
         }
 
-        const { error } = await supabase.from("students").insert([newStudent])
+        const { error } = await supabase.from("crm_students").insert([newStudent])
 
         if (error) {
             console.error("Error inserting student:", error)

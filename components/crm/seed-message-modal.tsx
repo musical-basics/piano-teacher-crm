@@ -28,7 +28,7 @@ export function SeedMessageModal({ isOpen, onClose, studentId, onSuccess }: {
 
         try {
             // Save message with the selected sender AND the custom date
-            await supabase.from('messages').insert({
+            await supabase.from('crm_messages').insert({
                 student_id: studentId,
                 sender_role: sender,
                 body_text: text,
@@ -67,8 +67,8 @@ export function SeedMessageModal({ isOpen, onClose, studentId, onSuccess }: {
                     <button
                         onClick={() => setSender('student')}
                         className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all ${sender === 'student'
-                                ? 'bg-slate-50 border-slate-300 text-slate-800 shadow-sm'
-                                : 'bg-white border-transparent text-slate-400 hover:bg-slate-50'
+                            ? 'bg-slate-50 border-slate-300 text-slate-800 shadow-sm'
+                            : 'bg-white border-transparent text-slate-400 hover:bg-slate-50'
                             }`}
                     >
                         <User size={18} />
@@ -78,8 +78,8 @@ export function SeedMessageModal({ isOpen, onClose, studentId, onSuccess }: {
                     <button
                         onClick={() => setSender('instructor')}
                         className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all ${sender === 'instructor'
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
-                                : 'bg-white border-transparent text-slate-400 hover:bg-slate-50'
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
+                            : 'bg-white border-transparent text-slate-400 hover:bg-slate-50'
                             }`}
                     >
                         <GraduationCap size={18} />

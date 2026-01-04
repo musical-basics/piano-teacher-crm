@@ -86,7 +86,7 @@ export default function CRMDashboard() {
     try {
       // Fetch all students
       const { data: studentsData, error: studentsError } = await supabase
-        .from("students")
+        .from("crm_students")
         .select("*")
         .order("last_contacted_at", { ascending: false, nullsFirst: false })
 
@@ -97,7 +97,7 @@ export default function CRMDashboard() {
 
       // Fetch all messages
       const { data: messagesData, error: messagesError } = await supabase
-        .from("messages")
+        .from("crm_messages")
         .select("*")
         .order("created_at", { ascending: true })
 
@@ -134,7 +134,8 @@ export default function CRMDashboard() {
           country: dbStudent.country_code || "US",
           countryFlag: getCountryFlag(dbStudent.country_code),
           tags: dbStudent.tags || [],
-          instructorNotes: dbStudent.instructor_strategy
+          instructorNotes: dbStudent.instructor_strategy,
+          experienceLevel: dbStudent.experience_level
         }
       })
 
@@ -210,7 +211,7 @@ export default function CRMDashboard() {
     // Update in Supabase
     try {
       const { error } = await supabase
-        .from("students")
+        .from("crm_students")
         .update({
           full_name: updates.name,
           email: updates.email,
@@ -247,7 +248,7 @@ export default function CRMDashboard() {
     }
 
     try {
-      const { error } = await supabase.from("students").delete().eq("id", studentId)
+      const { error } = await supabase.from("crm_students").delete().eq("id", studentId)
 
       if (error) {
         throw error

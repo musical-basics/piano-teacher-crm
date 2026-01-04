@@ -84,7 +84,7 @@ export async function GET(req: Request) {
 
             // A. Check Dedupe early
             const { data: existing } = await supabase
-                .from('messages')
+                .from('crm_messages')
                 .select('id')
                 .eq('gmail_message_id', msg.id)
                 .single();
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
 
             // D. Does this student exist in our DB?
             const { data: student } = await supabase
-                .from('students')
+                .from('crm_students')
                 .select('id')
                 .eq('email', senderEmail)
                 .single();
@@ -119,7 +119,7 @@ export async function GET(req: Request) {
             const dateHeader = payload.headers?.find(h => h.name === 'Date');
             const createdAt = dateHeader ? new Date(dateHeader.value!).toISOString() : new Date().toISOString();
 
-            await supabase.from('messages').insert({
+            await supabase.from('crm_messages').insert({
                 student_id: student.id,
                 sender_role: 'student',
                 body_text: body,

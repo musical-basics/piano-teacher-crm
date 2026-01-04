@@ -1,6 +1,6 @@
 "use client"
 
-import { Sparkles, Globe, Pencil, Send, Loader2, ChevronDown, Bot } from "lucide-react"
+import { Sparkles, Globe, Pencil, Send, Loader2, ChevronDown, Bot, GraduationCap } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import type { Student } from "@/lib/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -75,7 +75,7 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     setIsSaving(true)
     try {
       const { error } = await supabase
-        .from("students")
+        .from("crm_students")
         .update({ instructor_strategy: strategy })
         .eq("id", student.id)
       if (error) console.error("Error saving strategy:", error)
@@ -226,6 +226,13 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
             {student.countryFlag} {student.country}
           </span>
         </div>
+        {/* Experience Level Badge */}
+        {student.experienceLevel && (
+          <div className="flex items-center gap-2 mt-2 text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md w-fit">
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>{student.experienceLevel}</span>
+          </div>
+        )}
       </div>
 
       {/* Chat Section */}
@@ -302,8 +309,8 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
 
               <div
                 className={`flex-1 p-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "bg-indigo-500 text-white ml-8"
-                    : msg.role === "system" ? "bg-slate-50 text-slate-500 italic border border-slate-100 mr-8"
-                      : "bg-slate-100 text-slate-700 mr-8"
+                  : msg.role === "system" ? "bg-slate-50 text-slate-500 italic border border-slate-100 mr-8"
+                    : "bg-slate-100 text-slate-700 mr-8"
                   }`}
               >
                 {msg.content}

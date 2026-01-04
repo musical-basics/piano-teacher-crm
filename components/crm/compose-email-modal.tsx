@@ -74,7 +74,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
             setIsLoadingDraft(true)
             try {
                 const { data, error } = await supabase
-                    .from('drafts')
+                    .from('crm_drafts')
                     .select('*')
                     .eq('student_id', student.id)
                     .order('updated_at', { ascending: false })
@@ -100,15 +100,15 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
                     if (editorRef.current) editorRef.current.innerHTML = ""
                     setLastSaved(null)
                 }
-            } catch (error) {
-                console.error("Failed to load draft:", error)
+            } catch (err) {
+                console.error("Failed to load draft:", err)
             } finally {
                 setIsLoadingDraft(false)
             }
         }
 
         loadDraft()
-    }, [isOpen, student.id])
+    }, [isOpen, student.id, initialContent]) // Added initialContent dependency
 
     // --- GENERATE REPLY CHAIN WHEN MODAL OPENS ---
     useEffect(() => {
@@ -126,7 +126,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
     }, [isOpen, messages, student.name, student.email])
 
     // --- 2. EDITOR COMMANDS ---
-    const execCommand = (command: string, value?: string) => {
+    const execCommand = (command: string, value: string | undefined = undefined) => {
         // Restore selection if we lost it (e.g. clicking a toolbar button)
         restoreSelection()
         document.execCommand(command, false, value)
@@ -166,9 +166,9 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
             let currentDraftId = draftId
 
             if (currentDraftId) {
-                await supabase.from('drafts').update(draftData).eq('id', currentDraftId)
+                await supabase.from('crm_drafts').update(draftData).eq('id', currentDraftId)
             } else {
-                const { data } = await supabase.from('drafts').insert(draftData).select().single()
+                const { data } = await supabase.from('crm_drafts').insert(draftData).select().single()
                 if (data) {
                     setDraftId(data.id)
                     currentDraftId = data.id
@@ -182,25 +182,32 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
         }
     }, [content, subject, draftId, student.id])
 
+    // Auto-save
+    useEffect(() => {
+        if (!isOpen) return
+        const timeout = setTimeout(saveDraft, 2000)
+        return () => clearTimeout(timeout)
+    }, [content, subject, saveDraft, isOpen])
+
     // --- 4. ATTACHMENT LOGIC ---
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return
-        if (!draftId) await saveDraft()
+        if (!e.target.files) return
+        const files = Array.from(e.target.files)
 
         setIsUploading(true)
-        const file = e.target.files[0]
-        const filePath = `${student.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-
         try {
-            const { error: uploadErr } = await supabase.storage.from('attachments').upload(filePath, file)
-            if (uploadErr) throw uploadErr
+            for (const file of files) {
+                const filePath = `${student.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+                const { error: uploadErr } = await supabase.storage.from('attachments').upload(filePath, file)
+                if (uploadErr) throw uploadErr
 
-            setAttachments(prev => [...prev, {
-                file_name: file.name,
-                file_size: file.size,
-                file_type: file.type,
-                storage_path: filePath
-            }])
+                setAttachments(prev => [...prev, {
+                    file_name: file.name,
+                    file_size: file.size,
+                    file_type: file.type,
+                    storage_path: filePath
+                }])
+            }
         } catch (err) {
             console.error(err)
         } finally {
@@ -305,7 +312,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
 
     // --- CLEANUP ---
     const handleDiscard = async () => {
-        if (draftId) await supabase.from('drafts').delete().eq('id', draftId)
+        if (draftId) await supabase.from('crm_drafts').delete().eq('id', draftId)
         onClose()
     }
 
@@ -326,7 +333,7 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
             // Pass both full HTML (for email) and clean content (for DB)
             await onSend(fullContent, subject, attachments, content)
             if (draftId) {
-                await supabase.from('drafts').delete().eq('id', draftId)
+                await supabase.from('crm_drafts').delete().eq('id', draftId)
             }
             onClose()
         } catch (error) {
