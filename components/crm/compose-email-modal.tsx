@@ -250,11 +250,15 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
     }
 
     const handleDrop = async (e: React.DragEvent) => {
-        e.preventDefault()
-        const files = e.dataTransfer.files
-        if (files.length > 0 && files[0].type.startsWith("image/")) {
-            await uploadInlineImage(files[0])
+        // Only handle file drops (images from desktop)
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            e.preventDefault()
+            const files = e.dataTransfer.files
+            if (files.length > 0 && files[0].type.startsWith("image/")) {
+                await uploadInlineImage(files[0])
+            }
         }
+        // Otherwise, allow default behavior (internal drag & drop)
     }
 
     // --- 6. ASSET MANAGER HANDLER ---
@@ -390,227 +394,226 @@ export function ComposeEmailModal({ isOpen, onClose, student, messages = [], ini
                     }`}
             >
                 {/* --- ASSET MANAGER OVERLAY --- */}
-                {showAssetManager ? (
+                {showAssetManager && (
                     <div className="absolute inset-0 z-20 bg-white flex flex-col">
                         <AssetManager
                             onInsert={handleInsertAsset}
                             onClose={() => setShowAssetManager(false)}
                         />
                     </div>
-                ) : (
-                    <>
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-5 py-3 bg-slate-800 rounded-t-xl">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-white">New Message</span>
-                                {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
-                                {!isSaving && lastSaved && (
-                                    <span className="text-[10px] text-slate-400">Saved</span>
-                                )}
-                                {isUploading && (
-                                    <span className="text-[10px] text-indigo-300 flex items-center gap-1">
-                                        <Loader2 className="w-3 h-3 animate-spin" /> Uploading...
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() => setIsMinimized(true)}
-                                    className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
-                                    title="Minimize"
-                                >
-                                    <Minus className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={() => setIsMaximized(!isMaximized)}
-                                    className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
-                                    title={isMaximized ? "Restore" : "Maximize"}
-                                >
-                                    {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                                </button>
-                                <button
-                                    onClick={handleClose}
-                                    className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
-                                    title="Close"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
+                )}
+                <div className={`flex flex-col h-full ${showAssetManager ? 'hidden' : ''}`}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 py-3 bg-slate-800 rounded-t-xl">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-white">New Message</span>
+                            {isSaving && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                            {!isSaving && lastSaved && (
+                                <span className="text-[10px] text-slate-400">Saved</span>
+                            )}
+                            {isUploading && (
+                                <span className="text-[10px] text-indigo-300 flex items-center gap-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" /> Uploading...
+                                </span>
+                            )}
                         </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setIsMinimized(true)}
+                                className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                                title="Minimize"
+                            >
+                                <Minus className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setIsMaximized(!isMaximized)}
+                                className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                                title={isMaximized ? "Restore" : "Maximize"}
+                            >
+                                {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                            </button>
+                            <button
+                                onClick={handleClose}
+                                className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                                title="Close"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
 
-                        {/* Loading Overlay */}
-                        {isLoadingDraft && (
-                            <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center rounded-2xl">
-                                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                            </div>
-                        )}
+                    {/* Loading Overlay */}
+                    {isLoadingDraft && (
+                        <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center rounded-2xl">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                        </div>
+                    )}
 
-                        {/* To field */}
-                        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
-                            <span className="text-sm text-slate-400 w-16">To</span>
-                            <div className="flex-1 flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-sm text-slate-700">
-                                    {student.name}
-                                    <button className="w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                    {/* To field */}
+                    <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
+                        <span className="text-sm text-slate-400 w-16">To</span>
+                        <div className="flex-1 flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-sm text-slate-700">
+                                {student.name}
+                                <button className="w-4 h-4 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Subject field */}
+                    <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
+                        <span className="text-sm text-slate-400 w-16">Subject</span>
+                        <input
+                            type="text"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                            onBlur={saveDraft}
+                            placeholder="Subject"
+                            className="flex-1 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none"
+                        />
+                    </div>
+
+                    {/* Body - Rich Text Editor */}
+                    <div className="flex-1 p-5 overflow-hidden">
+                        <div
+                            ref={editorRef}
+                            contentEditable
+                            onKeyDown={handleKeyDown}
+                            onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                            onBlur={saveDraft}
+                            onPaste={handlePaste}
+                            onDrop={handleDrop}
+                            onMouseUp={saveSelection}
+                            onKeyUp={saveSelection}
+                            data-placeholder="Write your message... (Paste images directly!)"
+                            className="w-full h-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none leading-relaxed overflow-y-auto [&_img]:cursor-move"
+                            style={{ whiteSpace: "pre-wrap" }}
+                        />
+                    </div>
+
+                    {/* Attachments Area */}
+                    {attachments.length > 0 && (
+                        <div className="px-5 py-2 flex flex-wrap gap-2 border-t border-slate-100">
+                            {attachments.map((file, i) => (
+                                <div key={i} className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs">
+                                    <Paperclip className="w-3 h-3 text-slate-400" />
+                                    <span className="max-w-[120px] truncate text-slate-600">{file.file_name}</span>
+                                    <button
+                                        className="text-slate-400 hover:text-red-500"
+                                        onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                                    >
                                         <X className="w-3 h-3" />
                                     </button>
-                                </span>
-                            </div>
+                                </div>
+                            ))}
                         </div>
+                    )}
 
-                        {/* Subject field */}
-                        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
-                            <span className="text-sm text-slate-400 w-16">Subject</span>
-                            <input
-                                type="text"
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
-                                onBlur={saveDraft}
-                                placeholder="Subject"
-                                className="flex-1 text-sm text-slate-700 placeholder:text-slate-300 focus:outline-none"
-                            />
-                        </div>
+                    {/* Footer toolbar */}
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+                        <div className="flex items-center gap-1">
+                            {/* Send button */}
+                            <button
+                                onClick={handleSendAction}
+                                disabled={!content.trim() || isSending || isUploading}
+                                className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {isSending ? (
+                                    <>Sending... <Loader2 className="w-4 h-4 animate-spin" /></>
+                                ) : (
+                                    <>Send <Send className="w-4 h-4" /></>
+                                )}
+                            </button>
 
-                        {/* Body - Rich Text Editor */}
-                        <div className="flex-1 p-5 overflow-hidden">
-                            <div
-                                ref={editorRef}
-                                contentEditable
-                                onKeyDown={handleKeyDown}
-                                onInput={(e) => setContent(e.currentTarget.innerHTML)}
-                                onBlur={saveDraft}
-                                onPaste={handlePaste}
-                                onDrop={handleDrop}
-                                onMouseUp={saveSelection}
-                                onKeyUp={saveSelection}
-                                data-placeholder="Write your message... (Paste images directly!)"
-                                className="w-full h-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none leading-relaxed overflow-y-auto"
-                                style={{ whiteSpace: "pre-wrap" }}
-                            />
-                        </div>
-
-                        {/* Attachments Area */}
-                        {attachments.length > 0 && (
-                            <div className="px-5 py-2 flex flex-wrap gap-2 border-t border-slate-100">
-                                {attachments.map((file, i) => (
-                                    <div key={i} className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-xs">
-                                        <Paperclip className="w-3 h-3 text-slate-400" />
-                                        <span className="max-w-[120px] truncate text-slate-600">{file.file_name}</span>
-                                        <button
-                                            className="text-slate-400 hover:text-red-500"
-                                            onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
-                                        >
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Footer toolbar */}
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-                            <div className="flex items-center gap-1">
-                                {/* Send button */}
-                                <button
-                                    onClick={handleSendAction}
-                                    disabled={!content.trim() || isSending || isUploading}
-                                    className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    {isSending ? (
-                                        <>Sending... <Loader2 className="w-4 h-4 animate-spin" /></>
-                                    ) : (
-                                        <>Send <Send className="w-4 h-4" /></>
-                                    )}
+                            {/* Formatting tools */}
+                            <div className="flex items-center ml-3 pl-3 border-l border-slate-200">
+                                <button onClick={() => execCommand('bold')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bold">
+                                    <Bold className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => execCommand('italic')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Italic">
+                                    <Italic className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => execCommand('underline')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Underline">
+                                    <Underline className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => {
+                                    const url = prompt("Enter URL:")
+                                    if (url) execCommand('createLink', url)
+                                }} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Insert Link">
+                                    <Link className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => execCommand('insertUnorderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bullet List">
+                                    <List className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => execCommand('insertOrderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Numbered List">
+                                    <ListOrdered className="w-4 h-4" />
                                 </button>
 
-                                {/* Formatting tools */}
-                                <div className="flex items-center ml-3 pl-3 border-l border-slate-200">
-                                    <button onClick={() => execCommand('bold')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bold">
-                                        <Bold className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => execCommand('italic')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Italic">
-                                        <Italic className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => execCommand('underline')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Underline">
-                                        <Underline className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => {
-                                        const url = prompt("Enter URL:")
-                                        if (url) execCommand('createLink', url)
-                                    }} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Insert Link">
-                                        <Link className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => execCommand('insertUnorderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Bullet List">
-                                        <List className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => execCommand('insertOrderedList')} className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors" title="Numbered List">
-                                        <ListOrdered className="w-4 h-4" />
-                                    </button>
-
-                                    {/* Insert Image Button */}
-                                    <button
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                        title="Insert Image"
-                                    >
-                                        <ImageIcon className="w-4 h-4" />
-                                    </button>
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files[0]) {
-                                                uploadInlineImage(e.target.files[0])
-                                            }
-                                        }}
-                                    />
-
-                                    {/* Asset Library Button */}
-                                    <button
-                                        onClick={openAssetManager}
-                                        className="w-8 h-8 rounded-lg hover:bg-indigo-100 flex items-center justify-center text-indigo-600 transition-colors"
-                                        title="Open Asset Library"
-                                    >
-                                        <FolderOpen className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                                {/* Attach */}
+                                {/* Insert Image Button */}
                                 <button
-                                    onClick={() => attachmentInputRef.current?.click()}
-                                    className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                    title="Attach files"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-8 h-8 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                    title="Insert Image"
                                 >
-                                    {isUploading ? (
-                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                    ) : (
-                                        <Paperclip className="w-5 h-5" />
-                                    )}
+                                    <ImageIcon className="w-4 h-4" />
                                 </button>
                                 <input
-                                    ref={attachmentInputRef}
+                                    ref={fileInputRef}
                                     type="file"
+                                    accept="image/*"
                                     className="hidden"
-                                    onChange={handleFileSelect}
-                                    multiple
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            uploadInlineImage(e.target.files[0])
+                                        }
+                                    }}
                                 />
 
-                                {/* Delete */}
+                                {/* Asset Library Button */}
                                 <button
-                                    onClick={handleDiscard}
-                                    className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                                    title="Discard draft"
+                                    onClick={openAssetManager}
+                                    className="w-8 h-8 rounded-lg hover:bg-indigo-100 flex items-center justify-center text-indigo-600 transition-colors"
+                                    title="Open Asset Library"
                                 >
-                                    <Trash2 className="w-5 h-5" />
+                                    <FolderOpen className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
-                    </>
-                )}
+
+                        <div className="flex items-center gap-1">
+                            {/* Attach */}
+                            <button
+                                onClick={() => attachmentInputRef.current?.click()}
+                                className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Attach files"
+                            >
+                                {isUploading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <Paperclip className="w-5 h-5" />
+                                )}
+                            </button>
+                            <input
+                                ref={attachmentInputRef}
+                                type="file"
+                                className="hidden"
+                                onChange={handleFileSelect}
+                                multiple
+                            />
+
+                            {/* Delete */}
+                            <button
+                                onClick={handleDiscard}
+                                className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+                                title="Discard draft"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     )
