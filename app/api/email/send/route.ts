@@ -82,7 +82,11 @@ export async function POST(req: Request) {
             from: `"Lionel Yu From MusicalBasics" <${process.env.GMAIL_USER}>`,
             to: to,
             subject: subject,
-            html: htmlContent,
+            html: `
+            <div style="font-family: sans-serif; font-size: 14px; color: #334155; white-space: pre-wrap;">
+${htmlContent}
+            </div>
+            `,
             attachments: processedAttachments,
         });
         console.log("Mail sent, info:", info);
