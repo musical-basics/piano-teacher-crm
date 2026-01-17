@@ -9,17 +9,14 @@ interface AddStudentModalProps {
   onAdd: () => void // Triggers the list refresh
 }
 
+import { DateTimePicker } from "@/components/ui/date-time-picker"
+
 export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [country, setCountry] = useState("")
   const [initialNote, setInitialNote] = useState("")
-  // Initialize with current date and time in YYYY-MM-DDTHH:mm format for datetime-local
-  const [inquiryDate, setInquiryDate] = useState(() => {
-    const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-    return now.toISOString().slice(0, 16)
-  })
+  const [inquiryDate, setInquiryDate] = useState<Date | undefined>(new Date())
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +37,7 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
           email: email,
           country_code: country || 'US',
           status: 'Lead', // Default to Lead as per SQL
-          last_contacted_at: new Date(inquiryDate).toISOString(),
+          last_contacted_at: inquiryDate ? inquiryDate.toISOString() : new Date().toISOString(),
           notes: initialNote // Store initial inquiry in notes too
         })
         .select()
@@ -59,7 +56,7 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
             student_id: student.id,
             sender_role: 'student', // It's their inquiry
             body_text: initialNote,
-            created_at: new Date(inquiryDate).toISOString()
+            created_at: inquiryDate ? inquiryDate.toISOString() : new Date().toISOString()
           })
 
         if (msgError) throw msgError
@@ -70,9 +67,7 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
       onClose()
       // Reset form
       setName(""); setEmail(""); setCountry(""); setInitialNote("")
-      const now = new Date()
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-      setInquiryDate(now.toISOString().slice(0, 16))
+      setInquiryDate(new Date())
 
     } catch (err: any) {
       console.error("Save failed:", err)
@@ -136,12 +131,7 @@ export function AddStudentModal({ isOpen, onClose, onAdd }: AddStudentModalProps
 
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date & Time of First Inquiry</label>
-            <input
-              type="datetime-local"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              value={inquiryDate}
-              onChange={e => setInquiryDate(e.target.value)}
-            />
+            <DateTimePicker date={inquiryDate} setDate={setInquiryDate} />
           </div>
 
           <div>
