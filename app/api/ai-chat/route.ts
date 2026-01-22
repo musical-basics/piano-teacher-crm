@@ -4,39 +4,30 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize all AI clients
+// Initialize Clients
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Create Supabase client
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export type AIProvider = 'gemini' | 'openai' | 'claude';
-
 export async function POST(req: Request) {
     try {
         const { message, studentId, provider = 'gemini' } = await req.json();
 
-        if (!message || !studentId) {
-            return NextResponse.json({ error: 'Missing message or studentId' }, { status: 400 });
-        }
-
-        // 1. Fetch Student Context
-        const { data: student, error: studentError } = await supabase
+        // 1. Fetch Student Data
+        const { data: student } = await supabase
             .from('crm_students')
-            .select('full_name, country_code, instructor_strategy, tags')
+            .select('*')
             .eq('id', studentId)
             .single();
 
-        if (studentError || !student) {
-            return NextResponse.json({ error: 'Student not found' }, { status: 404 });
-        }
+        if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
-        // 2. NEW: Fetch the Last Message from this Student
+        // 2. Fetch Last Message
         const { data: lastMsgData } = await supabase
             .from('crm_messages')
             .select('body_text')
@@ -45,87 +36,96 @@ export async function POST(req: Request) {
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
-
         const lastStudentMessage = lastMsgData?.body_text || "(No previous message found)";
 
-        // 3. Fetch Instructor Persona
+        // 3. Fetch Persona
         const { data: settings } = await supabase
             .from('settings')
-            .select('instructor_profile, writing_style')
+            .select('*')
             .limit(1)
             .single();
-
         const instructorProfile = settings?.instructor_profile || 'A piano teacher';
         const writingStyle = settings?.writing_style || 'Professional and friendly';
 
-        // 4. Build the Context-Aware System Prompt
+        // 4. THE "CHATBOT" SYSTEM PROMPT
+        // Forces the specific "Web Chatbot" behavior (Reasoning + Markdown)
         const systemPrompt = `
-You are speaking AS ME, the instructor. I am: ${instructorProfile}
+You are an expert AI Copilot for a high-end music instructor.
+Your goal is to write a reply that sounds exactly like the instructor.
 
-MY WRITING STYLE (CRITICAL):
+**INSTRUCTOR PERSONA:**
+${instructorProfile}
+**WRITING STYLE:**
 ${writingStyle}
 
-RULES:
-1. NO sales-y fluff ("I'd love to!", "Great to hear!"). Be direct.
-2. ${writingStyle.toLowerCase().includes('typo') ? 'Make occasional small grammar slips.' : 'Use perfect grammar.'}
-3. ${writingStyle.toLowerCase().includes('!') ? 'Use exclamation marks sparingly.' : ''}
+**STUDENT CONTEXT:**
+- Name: ${student.full_name} (${student.country_code || 'Unknown'})
+- Strategy: ${student.instructor_strategy || 'None'}
+- Tags: ${student.tags?.join(', ') || 'None'}
 
-CONTEXT:
-I am replying to a student named ${student.full_name} (${student.country_code || 'Unknown'}).
-My Strategy for them: "${student.instructor_strategy || 'None'}"
-Student Tags: ${student.tags?.join(', ') || 'None'}
-
----
-THEIR LAST MESSAGE TO ME:
+**LAST MESSAGE FROM STUDENT:**
 "${lastStudentMessage}"
----
 
-MY INSTRUCTION TO YOU:
-${message}
+**USER INSTRUCTION:**
+"${message}"
 
-Write the response AS ME. Do not include subject lines or placeholders like [Name]. Just the body text.
-        `.trim();
+**GUIDELINES:**
+1. **Analyze First**: Briefly analyze the student's tone and needs (hidden reasoning).
+2. **Drafting**: Write the response. NO subject lines.
+3. **Tone Check**: Ensure it matches the "Writing Style" perfectly (e.g. casual vs formal).
+4. **Agentic Behavior**: If the user asks a question *about* the student, answer it directly. If they ask for a *draft*, output the draft clearly.
+`.trim();
 
         let replyText = '';
+        let usedModel = '';
 
-        // 5. Call the AI Provider
+        // 5. CALLING THE 2026 FLAGSHIP MODELS (Restored from your Repomix)
         if (provider === 'openai') {
+            usedModel = "gpt-5.2"; // KEEPING YOUR 5.2
             const completion = await openai.chat.completions.create({
-                model: "gpt-4o",
-                max_tokens: 500,
+                model: usedModel,
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: message }
                 ],
+                temperature: 0.7,
             });
             replyText = completion.choices[0].message.content || "";
         }
         else if (provider === 'claude') {
+            usedModel = "claude-sonnet-4-5-20250929"; // KEEPING YOUR 4.5
             const msg = await anthropic.messages.create({
-                model: "claude-sonnet-4-20250514", // Fallback if 4 isn't out, use "claude-3-5-sonnet-20240620"
-                max_tokens: 500,
+                model: usedModel,
+                max_tokens: 1000,
                 system: systemPrompt,
                 messages: [{ role: "user", content: message }],
+                temperature: 0.7,
             });
             // @ts-ignore
             replyText = msg.content[0].text;
         }
         else {
-            // Default: Gemini
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-            const result = await model.generateContent(systemPrompt); // Send full prompt in one go for better context
+            // Gemini (Default)
+            usedModel = "gemini-3-pro-preview"; // KEEPING YOUR 3.0
+
+            const model = genAI.getGenerativeModel({
+                model: usedModel,
+                generationConfig: {
+                    temperature: 0.7 // Higher temp for "Chatbot" creativity
+                }
+            });
+            const result = await model.generateContent(systemPrompt);
             replyText = result.response.text();
         }
 
-        // 6. Optional Humanizer
-        if (writingStyle.toLowerCase().includes('lowercase') && Math.random() > 0.6) {
-            replyText = replyText.charAt(0).toLowerCase() + replyText.slice(1);
-        }
-
-        return NextResponse.json({ reply: replyText, provider });
+        return NextResponse.json({
+            reply: replyText,
+            provider,
+            modelUsed: usedModel
+        });
 
     } catch (error: any) {
         console.error('AI Error:', error);
-        return NextResponse.json({ error: error.message || 'Failed to process request' }, { status: 500 });
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

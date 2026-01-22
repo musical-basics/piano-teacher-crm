@@ -18,10 +18,26 @@ interface CopilotPaneProps {
   onEditStudent?: () => void
 }
 
+// UPDATED: Labels match your bleeding-edge repomix models
 const providerConfig = {
-  gemini: { name: 'Gemini 2.0', color: 'bg-gradient-to-br from-indigo-500 to-teal-400', icon: '✨' },
-  openai: { name: 'GPT-4o', color: 'bg-gradient-to-br from-green-500 to-emerald-400', icon: '🤖' },
-  claude: { name: 'Claude Sonnet 4', color: 'bg-gradient-to-br from-orange-500 to-amber-400', icon: '🧠' },
+  gemini: {
+    name: 'Gemini 3.0 Pro', // Updated label
+    id: 'gemini',
+    color: 'bg-gradient-to-br from-indigo-500 to-teal-400',
+    icon: '✨'
+  },
+  openai: {
+    name: 'GPT-5.2', // Updated label
+    id: 'openai',
+    color: 'bg-gradient-to-br from-green-500 to-emerald-400',
+    icon: '🤖'
+  },
+  claude: {
+    name: 'Claude 4.5 Sonnet', // Updated label
+    id: 'claude',
+    color: 'bg-gradient-to-br from-orange-500 to-amber-400',
+    icon: '🧠'
+  },
 }
 
 export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
