@@ -8,6 +8,8 @@ import { formatTime } from "@/lib/date-utils"
 import { ComposeEmailModal } from "./compose-email-modal"
 import { SeedMessageModal } from "./seed-message-modal"
 import { generateReplyChainHtml } from "@/lib/reply-chain"
+import { useSendMessage, useDeleteMessage } from "@/hooks/use-crm"
+import { useQueryClient } from '@tanstack/react-query'
 
 interface ConversationPaneProps {
   student: Student
@@ -21,10 +23,41 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
   const [isSeedOpen, setIsSeedOpen] = useState(false)
 
   // New state to show loading during send
-  const [isSending, setIsSending] = useState(false)
+  const [isSending, setIsSending] = useState(false) // Keep local state for UI feedback or rely on mutation state? Mutation has isPending
   const [isSyncing, setIsSyncing] = useState(false)
 
   const [status, setStatus] = useState(student.status || 'Lead')
+
+  // Init Hooks
+  const sendMessage = useSendMessage()
+  const deleteMessage = useDeleteMessage()
+  const queryClient = useQueryClient()
+
+  // Realtime Updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'crm_messages',
+          filter: `student_id=eq.${student.id}`
+        },
+        (payload) => {
+          console.log('New message received!', payload)
+          // Instantly refresh the messages list
+          queryClient.invalidateQueries({ queryKey: ['messages', student.id] })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [student.id, queryClient])
+
 
   // --- FIX: Reset status when student changes ---
   useEffect(() => {
@@ -70,8 +103,9 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
       const data = await res.json()
 
       if (data.count > 0) {
-        // If we found new emails, reload the page to show them
-        window.location.reload()
+        // Invalidate queries instead of reloading
+        queryClient.invalidateQueries({ queryKey: ['messages', student.id] })
+        queryClient.invalidateQueries({ queryKey: ['students'] })
       } else {
         // Optional: Show a tiny toast saying "Up to date"
         console.log("No new emails found")
@@ -89,67 +123,42 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
     }
   }
 
-  // --- THE FIX: Call the API Route ---
+  // --- Refactored Send Function ---
   const handleSendEmail = async (content: string, subject: string, attachments: any[], cleanContent?: string) => {
     if (!content.trim()) return
 
-    setIsSending(true)
+    // setIsSending(true) // Mutation handles loading state, but we can keep this for consistent UI if needed, or simply use sendMessage.isPending
 
     try {
-      // 1. Call the Gmail API Route (This sends the real email)
-      // Add a 15-second timeout
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out')), 15000)
-      );
+      // Trigger the mutation
+      await sendMessage.mutateAsync({
+        studentId: student.id,
+        to: student.email,
+        content,
+        subject: subject || "Re: Piano Lessons",
+        attachments,
+        cleanContent
+      })
 
-      const fetchPromise = fetch('/api/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: student.email,
-          subject: subject || "Re: Piano Lessons", // Fallback subject
-          htmlContent: content,
-          cleanContent: cleanContent || content, // Pass clean content for DB
-          studentId: student.id, // Use this ID to save to DB automatically
-          attachments: attachments // Pass attachments to the API
-        })
-      });
-
-      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send email')
-      }
-
-      // 2. Success! Update UI
-      // (The API route already saved it to Supabase, but we update locally to see it instantly)
-      // Use cleanContent for the local UI update too!
-      onSendMessage(cleanContent || content, subject)
-
-      // Clear inputs
+      // Success is handled by the hook (invalidating queries)
+      // Just clear local state
       setMessage("")
 
     } catch (err: any) {
       console.error("Failed to send message:", err)
       alert(`Error sending email: ${err.message}`)
-    } finally {
-      setIsSending(false)
     }
   }
 
   const handleDeleteMessage = async (messageId: string) => {
     if (!confirm("Are you sure you want to delete this message? This cannot be undone.")) return
 
-    const { error } = await supabase.from('crm_messages').delete().eq('id', messageId)
-
-    if (error) {
+    try {
+      await deleteMessage.mutateAsync(messageId)
+      // No reload needed! The list will update automatically.
+    } catch (error) {
       console.error("Failed to delete message:", error)
       alert("Failed to delete message")
-    } else {
-      // Reload to refresh the list (simplest way to re-sync props)
-      window.location.reload()
     }
   }
 
@@ -177,6 +186,8 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
     }
     // Shift+Enter allows new line
   }
+
+  const isSendingLoading = sendMessage.isPending || isSending // Use mutation loading state
 
   return (
     <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
@@ -357,11 +368,11 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
           </button>
           <button
             onClick={handleQuickSend}
-            disabled={!message.trim() || isSending}
+            disabled={!message.trim() || isSendingLoading}
             className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             title="Send reply"
           >
-            {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            {isSendingLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
         <p className="text-xs text-slate-400 mt-2 ml-14">
@@ -384,7 +395,11 @@ export function ConversationPane({ student, onSendMessage }: ConversationPanePro
         onClose={() => setIsSeedOpen(false)}
         studentId={student.id}
         onSuccess={() => {
-          window.location.reload()
+          // With realtime updates, we might not need to manually reload, but seed message modal might handle it internally or we can invalidate query here if needed.
+          // Ideally onSuccess should just invalidate. 
+          // For now, let's just invalidate query to be safe if the modal supports a callback without reload.
+          queryClient.invalidateQueries({ queryKey: ['messages', student.id] })
+          queryClient.invalidateQueries({ queryKey: ['students'] })
         }}
       />
     </div>

@@ -94,3 +94,67 @@ export function useStudentMessages(studentId: string | null) {
         }
     })
 }
+
+// 3. Send Message Mutation
+export function useSendMessage() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async ({
+            studentId,
+            to,
+            content,
+            subject,
+            attachments = [],
+            cleanContent
+        }: {
+            studentId: string,
+            to: string,
+            content: string,
+            subject: string,
+            attachments?: any[],
+            cleanContent?: string
+        }) => {
+            // Call your existing API route
+            const response = await fetch('/api/email/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to, // In real usage, you'd pass this in
+                    subject,
+                    htmlContent: content,
+                    cleanContent: cleanContent || content,
+                    studentId,
+                    attachments
+                })
+            })
+
+            if (!response.ok) throw new Error('Failed to send email')
+            return response.json()
+        },
+        // When successful, refresh messages for THIS student only
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['messages', variables.studentId] })
+            // Optional: Also refresh student list to update "last message" snippet
+            queryClient.invalidateQueries({ queryKey: ['students'] })
+        }
+    })
+}
+
+// 4. Delete Message Mutation
+export function useDeleteMessage() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async (messageId: string) => {
+            const { error } = await supabase.from('crm_messages').delete().eq('id', messageId)
+            if (error) throw error
+        },
+        onSuccess: () => {
+            // Refresh all message lists
+            // (Optimally you would pass studentId to be specific, but this is safe)
+            queryClient.invalidateQueries({ queryKey: ['messages'] })
+            queryClient.invalidateQueries({ queryKey: ['students'] })
+        }
+    })
+}
