@@ -33,27 +33,38 @@ export function useStudents() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('crm_students')
-                .select('*')
+                .select('*, crm_messages(id, body_text, created_at, sender_role)')
                 .order('last_contacted_at', { ascending: false, nullsFirst: false })
+                .order('created_at', { foreignTable: 'crm_messages', ascending: false })
+                .limit(1, { foreignTable: 'crm_messages' })
 
             if (error) throw error
 
             // Map DB shape to UI shape (Student type)
-            // Note: We intentionally leave messages empty here to keep it fast
-            return (data || []).map((s: any) => ({
-                id: s.id,
-                name: s.full_name,
-                email: s.email,
-                status: s.status || 'Lead',
-                country: s.country_code || 'US',
-                countryFlag: getCountryFlag(s.country_code),
-                tags: s.tags || [],
-                instructorNotes: s.instructor_strategy,
-                lastMessageDate: s.last_contacted_at ? new Date(s.last_contacted_at) : new Date(0),
-                messages: [], // Empty initially!
-                lastMessage: "Click to load...", // Placeholder, will be populated on selection? Or maybe we can fetch just the last message content if needed, but for now placeholder is fine
-                experienceLevel: s.experience_level
-            })) as Student[]
+            return (data || []).map((s: any) => {
+                const latestMsg = s.crm_messages?.[0]
+                const messages: Message[] = latestMsg ? [{
+                    id: latestMsg.id,
+                    content: latestMsg.body_text || "",
+                    sender: latestMsg.sender_role || "student",
+                    timestamp: new Date(latestMsg.created_at)
+                }] : []
+
+                return {
+                    id: s.id,
+                    name: s.full_name,
+                    email: s.email,
+                    status: s.status || 'Lead',
+                    country: s.country_code || 'US',
+                    countryFlag: getCountryFlag(s.country_code),
+                    tags: s.tags || [],
+                    instructorNotes: s.instructor_strategy,
+                    lastMessageDate: s.last_contacted_at ? new Date(s.last_contacted_at) : new Date(0),
+                    messages: messages, // Populated with just the latest message
+                    lastMessage: messages[0]?.content || "No messages yet",
+                    experienceLevel: s.experience_level
+                }
+            }) as Student[]
         }
     })
 }
