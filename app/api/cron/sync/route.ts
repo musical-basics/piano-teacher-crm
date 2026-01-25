@@ -47,10 +47,10 @@ function extractBody(payload: any): string {
 }
 
 export async function GET(req: Request) {
-    // SECURITY: Simple check to prevent random people from spamming this
-    const { searchParams } = new URL(req.url);
-    const key = searchParams.get('key');
-    if (key !== process.env.CRON_SECRET) {
+    // SECURITY: Check the Authorization header (Standard Vercel Cron Security)
+    // Vercel automatically sends "Bearer <YOUR_CRON_SECRET_VALUE>"
+    const authHeader = req.headers.get('authorization');
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
