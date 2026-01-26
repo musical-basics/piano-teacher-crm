@@ -50,12 +50,15 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
   const [isProviderOpen, setIsProviderOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Track current student ID to prevent race conditions
+  const activeStudentIdRef = useRef(student.id)
+
   // Track if we have already auto-analyzed this specific student session
-  // This prevents it from running every time you type a letter
   const hasAnalyzedRef = useRef(false)
 
   // --- 1. RESET STATE ON STUDENT CHANGE ---
   useEffect(() => {
+    activeStudentIdRef.current = student.id // Update ref
     setStrategy(student.instructorNotes || "")
     setMessages([])
     setInputMessage("")
@@ -113,6 +116,7 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     }])
 
     try {
+      const currentId = student.id
       const response = await fetch("/api/ai-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,6 +129,9 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
       })
       const data = await response.json()
 
+      // RACE CONDITION CHECK
+      if (activeStudentIdRef.current !== currentId) return
+
       if (data.error) {
         setMessages(prev => [...prev, { role: "assistant", content: `Error: ${data.error}` }])
       } else {
@@ -136,7 +143,10 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     } catch (error) {
       console.error("Error calling AI:", error)
     } finally {
-      setIsLoading(false)
+      // Only turn off loading if we are still on the same student
+      if (activeStudentIdRef.current === student.id) {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -150,6 +160,7 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
     setIsLoading(true)
 
     try {
+      const currentId = student.id
       const response = await fetch("/api/ai-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,6 +172,9 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
       })
       const data = await response.json()
 
+      // RACE CONDITION CHECK
+      if (activeStudentIdRef.current !== currentId) return
+
       if (data.error) {
         setMessages(prev => [...prev, { role: "assistant", content: `Error: ${data.error}`, provider }])
       } else {
@@ -168,9 +182,13 @@ export function CopilotPane({ student, onEditStudent }: CopilotPaneProps) {
       }
     } catch (error) {
       console.error("Error calling AI:", error)
-      setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error.", provider }])
+      if (activeStudentIdRef.current === student.id) {
+        setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error.", provider }])
+      }
     } finally {
-      setIsLoading(false)
+      if (activeStudentIdRef.current === student.id) {
+        setIsLoading(false)
+      }
     }
   }
 
